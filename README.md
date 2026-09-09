@@ -13,6 +13,24 @@ read the same numbers. Every command takes `--json`.
 pip install -e .
 ```
 
+## On your phone
+
+There is a web app: **[Ramp & Ruin](web/)** — a single self-contained HTML file
+that computes everything in the browser. No server, no account, works offline
+once loaded, installs to an iPhone home screen from Safari's Share → Add to Home
+Screen.
+
+It is not a precomputed bundle. The engine is ported to JavaScript, so it prices
+**any** rule set you type in — change the hole-card rule and the whole chart
+recomputes. Two implementations of one model would normally drift; here the
+constants are generated from `constants.py` and a conformance suite asserts the
+JavaScript reproduces the Python's answers to 1e-9 across 2,127 checks,
+including four complete 340-cell charts. `pytest` runs it.
+
+Deploy it free from this repo: enable **Settings → Pages → Source → GitHub
+Actions** once, and `.github/workflows/pages.yml` verifies and publishes on every
+push to `main`.
+
 ## Start here
 
 The first question is not "what should I bet" but "is this worth playing":
@@ -243,22 +261,22 @@ one standard deviation. Short-term results tell you close to nothing.
 
 ## Status
 
-Everything in the original spec is built except the Phase 3 stretch goals
-(web UI, session logging, wallet-card export):
+Everything in the original spec is built except session logging:
 
 | phase | what | state |
 |---|---|---|
 | 1 | rules engine, true-count simulation, ramps, risk, viability | done |
 | 1.5 | Monte Carlo validation of the analytic risk model | done |
 | 2 | exact analyzer, computed charts, deviation indices, trainer | done |
+| 3 | web app: browser engine, live recompute for any rules | done |
 | — | exact-enumeration verification of the EV model itself | done |
 
 287 tests, ruff clean. The default suite runs in about 90 seconds; the
 long-running enumerations and Monte Carlo runs are opt-in:
 
 ```bash
-pytest                      # 259 fast tests
-pytest -m slow              # 28 slow ones, about 12 minutes
+pytest                      # 272 fast tests
+pytest -m slow              # 29 slow ones, about 12 minutes
 ruff check src tests
 ```
 

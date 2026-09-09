@@ -1,0 +1,257 @@
+<title>Ramp &amp; Ruin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#f4f4f1; --surface:#ffffff; --surface-2:#ecece7;
+  --ink:#171b18; --ink-dim:#5c6660; --ink-faint:#8b948e;
+  --line:#dcdcd6; --line-strong:#c3c4bc;
+  --accent:#237a52; --accent-soft:#d8ece2;
+  --good:#237a52; --warn:#9a6f18; --bad:#a83f2e;
+  --act-hit:#e8e8e2; --act-hit-ink:#3a403c;
+  --act-stand:#e6c374; --act-stand-ink:#4a3a08;
+  --act-double:#63bd90; --act-double-ink:#0d2e1e;
+  --act-split:#8fc6d4; --act-split-ink:#0e3039;
+  --act-sur:#dda29c; --act-sur-ink:#4a1a14;
+  --shadow:0 1px 2px rgba(20,30,25,.06), 0 8px 24px -12px rgba(20,30,25,.18);
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#121613; --surface:#1a201c; --surface-2:#232a26;
+    --ink:#e6eae7; --ink-dim:#98a49d; --ink-faint:#6d7a73;
+    --line:#2b332e; --line-strong:#3c463f;
+    --accent:#3fae7a; --accent-soft:#1d3529;
+    --good:#3fae7a; --warn:#d4a24c; --bad:#cc5540;
+    --act-hit:#2b332e; --act-hit-ink:#cfd8d2;
+    --act-stand:#8a6c22; --act-stand-ink:#f6e6c2;
+    --act-double:#2c7d57; --act-double-ink:#dff3e8;
+    --act-split:#2f6b7a; --act-split-ink:#dcf0f5;
+    --act-sur:#8d4038; --act-sur-ink:#f7dedb;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#121613; --surface:#1a201c; --surface-2:#232a26;
+  --ink:#e6eae7; --ink-dim:#98a49d; --ink-faint:#6d7a73;
+  --line:#2b332e; --line-strong:#3c463f;
+  --accent:#3fae7a; --accent-soft:#1d3529;
+  --good:#3fae7a; --warn:#d4a24c; --bad:#cc5540;
+  --act-hit:#2b332e; --act-hit-ink:#cfd8d2;
+  --act-stand:#8a6c22; --act-stand-ink:#f6e6c2;
+  --act-double:#2c7d57; --act-double-ink:#dff3e8;
+  --act-split:#2f6b7a; --act-split-ink:#dcf0f5;
+  --act-sur:#8d4038; --act-sur-ink:#f7dedb;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.5; -webkit-text-size-adjust:100%;
+}
+h1,h2,h3{font-family:Archivo,"IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+
+.masthead{
+  border-bottom:1px solid var(--line); background:var(--surface);
+  padding:14px 20px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+}
+.masthead h1{font-size:19px; letter-spacing:-.01em; font-weight:700}
+.masthead .sub{color:var(--ink-dim); font-size:13px}
+.masthead .spacer{flex:1}
+.theme-toggle{
+  border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink-dim);
+  border-radius:99px; padding:5px 12px; font:inherit; font-size:12px; cursor:pointer;
+}
+.theme-toggle:hover{color:var(--ink)}
+
+.shell{display:flex; flex-direction:column}
+/* On a phone the results come first: you open this to read a number, not to
+   fill in a form, and twenty controls above the fold hides the whole point. */
+.canvas{order:1}
+.rail{order:2}
+@media (min-width:980px){
+  .shell{display:grid; grid-template-columns:320px minmax(0,1fr)}
+  .canvas{order:0}
+  .rail{order:0}
+}
+
+.rail{
+  background:var(--surface); border-top:1px solid var(--line);
+  padding:0 20px 22px;
+}
+.rail > summary{
+  cursor:pointer; list-style:none; padding:14px 0; font-family:Archivo,sans-serif;
+  font-size:12px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+  color:var(--ink-dim); display:flex; align-items:center; gap:8px;
+}
+.rail > summary::-webkit-details-marker{display:none}
+.rail > summary::before{content:"▸"; font-size:11px; transition:transform .15s}
+.rail[open] > summary::before{transform:rotate(90deg)}
+.rail > summary:hover{color:var(--ink)}
+@media (min-width:980px){
+  .rail{border-top:0; border-right:1px solid var(--line); height:calc(100vh - 56px);
+        overflow-y:auto; position:sticky; top:0; padding-top:16px}
+  .rail > summary{display:none}
+}
+.group{margin-bottom:20px}
+.group > h3{
+  font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:600; margin-bottom:9px;
+}
+.field{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px}
+.field label{font-size:13px; color:var(--ink-dim)}
+.field input,.field select{
+  font:inherit; font-size:13px; color:var(--ink); background:var(--ground);
+  border:1px solid var(--line-strong); border-radius:7px; padding:5px 8px;
+  min-width:0; width:132px; text-align:right;
+}
+.field select{text-align:left; width:158px}
+.field input[type=range]{padding:0; width:120px; accent-color:var(--accent)}
+.field.wide input,.field.wide select{width:100%}
+.field.wide{display:block}
+.field.wide label{display:block; margin-bottom:5px}
+input:focus-visible,select:focus-visible,button:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+.hint{font-size:11.5px; color:var(--ink-faint); margin-top:-3px; margin-bottom:9px}
+
+.canvas{padding:20px; display:flex; flex-direction:column; gap:18px; min-width:0}
+
+.verdict{
+  border-radius:var(--radius); border:1px solid var(--line); background:var(--surface);
+  box-shadow:var(--shadow); overflow:hidden; display:flex;
+}
+.verdict .stripe{width:6px; flex:0 0 6px; background:var(--good)}
+.verdict.no .stripe{background:var(--bad)}
+.verdict .body{padding:14px 16px}
+.verdict .tag{
+  font-family:Archivo,sans-serif; font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; font-weight:700; color:var(--good);
+}
+.verdict.no .tag{color:var(--bad)}
+.verdict p{margin:4px 0 0; font-size:14.5px; max-width:62ch}
+
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:10px}
+.tile{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:12px 13px;
+}
+.tile .k{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-faint); font-weight:600}
+.tile .v{font-family:"IBM Plex Mono",monospace; font-size:23px; font-weight:600; margin-top:5px; letter-spacing:-.02em}
+.tile .n{font-size:11.5px; color:var(--ink-dim); margin-top:2px}
+.tile.warnish .v{color:var(--warn)}
+.tile.badish .v{color:var(--bad)}
+.tile.goodish .v{color:var(--good)}
+
+section.panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+.panel > header{
+  padding:11px 14px; border-bottom:1px solid var(--line);
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+}
+.panel > header h2{font-size:14px; font-weight:600; letter-spacing:-.005em}
+.panel > header .note{font-size:12px; color:var(--ink-faint)}
+.panel .pad{padding:14px}
+.scroll{overflow-x:auto}
+
+table{border-collapse:collapse; width:100%; font-size:13px}
+th,td{padding:6px 10px; text-align:right; white-space:nowrap}
+th{
+  font-size:10.5px; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:600; border-bottom:1px solid var(--line);
+}
+th:first-child,td:first-child{text-align:left}
+tbody tr + tr td{border-top:1px solid var(--line)}
+td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+
+.chip{
+  display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px;
+  font-weight:600; letter-spacing:.02em;
+}
+.chip.ok{background:var(--accent-soft); color:var(--good)}
+.chip.no{background:color-mix(in srgb,var(--bad) 16%,transparent); color:var(--bad)}
+.chip.cap{background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn)}
+
+/* Wallet card: the one thing meant to leave the screen as a picture. */
+.wallet{
+  background:var(--surface-2); border:1px solid var(--line-strong);
+  border-radius:var(--radius); padding:12px; max-width:340px;
+}
+.wallet h3{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:8px}
+.wallet table{font-size:14px}
+.wallet td,.wallet th{padding:4px 8px}
+.wallet .bet{font-weight:600}
+.wallet .sit{color:var(--ink-faint); font-style:italic; font-size:12.5px}
+
+.warn-list{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:7px}
+.warn-list li{
+  font-size:12.5px; color:var(--ink-dim); padding-left:11px; border-left:2px solid var(--warn);
+  line-height:1.45;
+}
+
+.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); padding:0 14px}
+.tabs button{
+  font:inherit; font-size:13px; font-weight:500; background:none; border:0;
+  color:var(--ink-dim); padding:9px 11px; cursor:pointer;
+  border-bottom:2px solid transparent; margin-bottom:-1px;
+}
+.tabs button[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--accent)}
+
+.chart-grid{border-collapse:separate; border-spacing:2px; font-family:"IBM Plex Mono",monospace}
+.chart-grid th{font-size:11px; padding:3px 0; border:0; text-align:center}
+.chart-grid td{padding:0; text-align:center}
+.chart-grid td.rl{
+  background:var(--surface-2); color:var(--ink-dim); font-size:11.5px;
+  padding:0 7px; text-align:right; font-weight:500; border-radius:4px;
+}
+.cell{
+  display:block; width:100%; min-width:27px; padding:5px 0; border-radius:4px;
+  font-size:12px; font-weight:600; position:relative;
+}
+.cell.hit{background:var(--act-hit); color:var(--act-hit-ink)}
+.cell.stand{background:var(--act-stand); color:var(--act-stand-ink)}
+.cell.double{background:var(--act-double); color:var(--act-double-ink)}
+.cell.split{background:var(--act-split); color:var(--act-split-ink)}
+.cell.surrender{background:var(--act-sur); color:var(--act-sur-ink)}
+.cell.close::after{
+  content:""; position:absolute; right:2px; top:2px; width:3px; height:3px;
+  border-radius:50%; background:currentColor; opacity:.55;
+}
+.legend{display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--ink-dim); margin-top:11px}
+.legend span{display:inline-flex; align-items:center; gap:5px}
+.legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
+
+.busy{padding:26px 14px; text-align:center; color:var(--ink-dim); font-size:13px}
+.bar{height:3px; background:var(--surface-2); border-radius:99px; overflow:hidden; margin:10px auto 0; max-width:220px}
+.bar i{display:block; height:100%; background:var(--accent); width:0; transition:width .12s linear}
+
+.foot{padding:4px 20px 28px; color:var(--ink-faint); font-size:11.5px; line-height:1.6; max-width:78ch}
+.foot a{color:var(--ink-dim)}
+
+@media (prefers-reduced-motion:reduce){ *{transition:none !important; animation:none !important} }
+</style>
+
+<header class="masthead">
+  <h1>Ramp &amp; Ruin</h1>
+  <span class="sub">bankroll and bet-spread analysis for card counting</span>
+  <span class="spacer"></span>
+  <button class="theme-toggle" id="theme" type="button">theme</button>
+</header>
+
+<div class="shell">
+  <details class="rail" id="rail"><summary>Rules &amp; bankroll</summary><div id="railBody"></div></details>
+  <main class="canvas" id="canvas"></main>
+</div>
+
+<p class="foot">
+  Every figure is computed in your browser from the rules above — nothing is
+  looked up, and nothing is sent anywhere. The edge model is linear in the true
+  count and slightly conservative at high counts; heat, backoffs and betting
+  errors are not modelled, so treat every win rate as an upper bound.
+  Card counting is legal; casinos are private property and may refuse service.
+</p>
+
+<script type="module" src="./src/app.js"></script>
