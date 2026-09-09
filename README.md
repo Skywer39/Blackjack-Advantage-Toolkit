@@ -58,6 +58,8 @@ positive counts is what makes a high minimum survivable.
 | Command | Question it answers |
 |---|---|
 | `bj viability` | Should I play this game at all, and at what spread? |
+| `bj sim` | Monte Carlo the bankroll; check the analytic ruin figure against it |
+| `bj validate` | How does simulated ruin converge on the analytic figure? |
 | `bj bankroll` | How much bankroll does a 1-12 spread need here? |
 | `bj ramp` | I have this bankroll — what do I bet at each count? |
 | `bj risk` | Win rate, SD, N0, risk of ruin, probability of profit |
@@ -101,6 +103,26 @@ Same rules, same spread, same play. Deep penetration is worth 3.7x the win rate
 of shallow, and needs 40% less bankroll to sustain — decided entirely by where
 the dealer puts the cut card. Counts of +4 and up, where most of the money is,
 occur five times as often.
+
+## The risk numbers are checked, not asserted
+
+`bj validate` plays the recommended configuration out hand by hand and compares
+the result with the closed form Phase 1 quotes:
+
+| rounds played | simulated RoR | analytic RoR | gap |
+|---|---|---|---|
+| 20,000 | 0.13% | 5.00% | −4.87 pts |
+| 50,000 | 1.62% | 5.00% | −3.38 pts |
+| 100,000 | 3.47% | 5.00% | −1.53 pts |
+| 200,000 | 4.63% | 5.00% | −0.37 pts |
+
+The closed form is sound and slightly conservative. It is also an *infinite*
+horizon figure — over a first season of a few hundred hours your real risk is a
+small fraction of the quoted 5%.
+
+The most useful thing the simulator turned up: **resizing your unit as the
+bankroll moves cuts risk of ruin from 4.25% to 0.47%**, at a cost of about 4% of
+the median outcome. Full results and caveats in `docs/validation.md`.
 
 ## What this gets right that simple tools get wrong
 

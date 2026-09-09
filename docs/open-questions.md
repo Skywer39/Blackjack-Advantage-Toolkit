@@ -56,7 +56,16 @@ The chart's basic-strategy ENHC corrections, by contrast, check out:
 `11 vs A → hit`, `8,8 vs A → hit`, `A,A vs A → hit`, and `8,8 vs 10 → surrender`
 (split runs about -0.56 after the ENHC penalty against surrender's fixed -0.50).
 
-## 4. The EV(tc) model is linear and the real curve is not
+## 4. The EV(tc) model is linear, and Phase 1.5 cannot check it
+
+`EV(tc) = base_edge + 0.005 * tc` is the standard approximation. The Monte Carlo
+in `docs/validation.md` confirms the *risk arithmetic* built on top of it, but it
+cannot confirm the model itself: the simulator draws hand results whose moments
+come from `ev_at_tc`, so a wrong edge produces a wrong simulation that agrees
+with the wrong closed form perfectly. Only real dealt hands, via the Phase 2
+strategy engine, can test this.
+
+## 4a. The linear model and the real curve
 
 `EV(tc) = base_edge + 0.005 * tc` is the standard approximation. It is good to
 about a hundredth of a percent over the counts you actually bet into, and it

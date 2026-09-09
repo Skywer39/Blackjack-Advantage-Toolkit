@@ -131,3 +131,48 @@ def test_ev_negative_spreads_are_labelled_as_such_not_merely_unaffordable():
     would imply that more money would fix it."""
     out = run("viability", "-p", "ambassador", "-b", "100000")
     assert "EV-negative" in out
+
+
+# --- Phase 1.5: simulation commands ---------------------------------------
+
+def test_sim_json_reports_both_ruin_figures():
+    d = run_json("sim", "-p", "ambassador", "-b", "94158", "--spread", "8",
+                 "--wong-out-below", "1", "--paths", "800", "--hands", "8000")
+    assert 0.0 <= d["empirical_ror"] <= 1.0
+    assert 0.0 <= d["analytic_ror"] <= 1.0
+    assert "ror_gap_points" in d
+    assert set(d["final_percentiles"]) == {"p5", "p25", "p50", "p75", "p95"}
+
+
+def test_sim_percentiles_are_ordered():
+    d = run_json("sim", "-p", "ambassador", "-b", "94158", "--paths", "800",
+                 "--hands", "8000")
+    p = d["final_percentiles"]
+    assert p["p5"] <= p["p25"] <= p["p50"] <= p["p75"] <= p["p95"]
+
+
+def test_sim_accepts_a_kelly_ramp():
+    d = run_json("sim", "-p", "ambassador", "-b", "600000", "--kelly", "0.4",
+                 "--paths", "500", "--hands", "5000")
+    assert d["starting_bankroll"] == 600000
+
+
+def test_sim_warns_when_the_horizon_is_too_short_to_judge_ruin():
+    d = run_json("sim", "-p", "ambassador", "-b", "94158", "--spread", "8",
+                 "--wong-out-below", "1", "--paths", "500", "--hands", "2000")
+    assert any("short relative to N0" in w for w in d["warnings"])
+
+
+def test_sim_rejects_an_unknown_outcome_model():
+    result = runner.invoke(app, ["sim", "-p", "ambassador", "-b", "100000",
+                                 "--outcome-model", "cauchy"])
+    assert result.exit_code != 0
+
+
+def test_validate_shows_ruin_rising_with_the_horizon():
+    rows = run_json("validate", "-p", "ambassador", "-b", "94158", "--spread", "8",
+                    "--wong-out-below", "1", "--paths", "600")
+    assert len(rows) >= 4
+    assert rows[0]["n_hands"] < rows[-1]["n_hands"]
+    # The analytic figure is a property of the ramp, not of the horizon.
+    assert len({round(r["analytic_ror"], 9) for r in rows}) == 1

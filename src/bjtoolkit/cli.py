@@ -29,6 +29,7 @@ from .risk import (
     ror_for_kelly,
 )
 from .rules import PRESETS, RuleSet, base_edge, base_edge_range, edge_components, get_preset
+from .simulate import ruin_convergence, simulate
 from .viability import assess, penetration_sweep
 
 app = typer.Typer(
@@ -458,6 +459,127 @@ def pen_sweep(
         )
     console.print(t)
     console.print()
+
+
+def _sim_ramp(r, d, bankroll, spread, kelly, unit, wong):
+    """Pick the ramp the simulator should play: fixed-spread by default, Kelly
+    only if the caller asked for it explicitly."""
+    if kelly is not None:
+        return kelly_ramp(r, d, bankroll=bankroll, kelly_fraction=kelly,
+                          wong_out_below=wong), f"{kelly:g} Kelly"
+    return (
+        spread_ramp(r, d, max_spread=spread, unit=unit or r.table_min,
+                    wong_out_below=wong),
+        f"fixed {spread:g}x spread",
+    )
+
+
+@app.command()
+def sim(
+    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
+    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
+    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
+    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    bankroll: float = typer.Option(..., "--bankroll", "-b"),
+    spread: float = typer.Option(8, "--spread", help="Fixed spread to play."),
+    kelly: Optional[float] = typer.Option(
+        None, "--kelly", help="Play a Kelly ramp instead of a fixed spread."
+    ),
+    unit: Optional[float] = typer.Option(None, "--unit"),
+    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    paths: int = typer.Option(10_000, "--paths", help="Bankrolls to simulate."),
+    hands: int = typer.Option(100_000, "--hands", help="Rounds per path."),
+    ruin_at: float = typer.Option(
+        0.0, "--ruin-at",
+        help="Bankroll level counted as ruin. 0 matches the analytic barrier; "
+             "pass the table minimum for the practical answer.",
+    ),
+    outcome_model: str = typer.Option(
+        "discrete", "--outcome-model", help="'discrete' (lumpy) or 'normal'."
+    ),
+    resize: bool = typer.Option(
+        False, "--resize", help="Resize bets to the current bankroll each round."
+    ),
+    seed: int = typer.Option(1234, "--seed"),
+    json: bool = P_JSON,
+) -> None:
+    """Monte Carlo the bankroll, and check the analytic risk of ruin against it."""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    d = load_or_simulate(r)
+    ramp_, label = _sim_ramp(r, d, bankroll, spread, kelly, unit, wong)
+    res = simulate(r, d, ramp_, bankroll=bankroll, n_paths=paths, n_hands=hands,
+                   ruin_at=ruin_at, outcome_model=outcome_model, resize=resize,
+                   seed=seed)
+    if json:
+        typer.echo(_dump(res.to_dict()))
+        return
+
+    console.print(f"\n[bold]{r.name}[/bold]")
+    console.print(
+        f"{paths:,} bankrolls of {_money(bankroll, r.currency)}, "
+        f"{hands:,} rounds each, {label}, "
+        f"{'resized each round' if resize else 'ramp fixed'}\n"
+    )
+    t = Table(title="Risk of ruin")
+    t.add_column("source"); t.add_column("value", justify="right")
+    t.add_row("analytic (closed form, infinite horizon)", f"{res.analytic_ror:.2%}")
+    t.add_row(f"simulated over {hands:,} rounds", f"{res.empirical_ror:.2%}")
+    t.add_row("difference", f"{res.ror_gap_points:+.2f} points")
+    console.print(t)
+
+    t2 = Table(title=f"Final bankroll after {hands:,} rounds")
+    t2.add_column("percentile"); t2.add_column("bankroll", justify="right")
+    for k, v in res.final_percentiles.items():
+        t2.add_row(k.upper(), _money(v, r.currency))
+    console.print(t2)
+    console.print(
+        f"Ended profitable    {res.fraction_profitable:.1%} of paths\n"
+        f"Mean profit         {_money(res.empirical_mean_profit, r.currency)} "
+        f"(analytic {_money(res.analytic_expected_profit, r.currency)})"
+    )
+    for w in res.warnings:
+        console.print(f"[yellow]! {w}[/yellow]")
+    console.print()
+
+
+@app.command()
+def validate(
+    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
+    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
+    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
+    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    bankroll: float = typer.Option(..., "--bankroll", "-b"),
+    spread: float = typer.Option(8, "--spread"),
+    unit: Optional[float] = typer.Option(None, "--unit"),
+    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    paths: int = typer.Option(5_000, "--paths"),
+    seed: int = typer.Option(1234, "--seed"),
+    json: bool = P_JSON,
+) -> None:
+    """Show how simulated ruin converges toward the analytic figure."""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    d = load_or_simulate(r)
+    ramp_ = spread_ramp(r, d, max_spread=spread, unit=unit or r.table_min,
+                        wong_out_below=wong)
+    rows = ruin_convergence(r, d, ramp_, bankroll=bankroll, n_paths=paths, seed=seed)
+    if json:
+        typer.echo(_dump(rows))
+        return
+    t = Table(title=f"Ruin convergence -- {_money(bankroll, r.currency)}, "
+                    f"{spread:g}x spread, {paths:,} paths")
+    for c in ("rounds", "simulated RoR", "analytic RoR", "gap", "% profitable"):
+        t.add_column(c, justify="right")
+    for row in rows:
+        t.add_row(f"{row['n_hands']:,}", f"{row['empirical_ror']:.2%}",
+                  f"{row['analytic_ror']:.2%}", f"{row['gap_points']:+.2f} pts",
+                  f"{row['fraction_profitable']:.1%}")
+    console.print(t)
+    console.print(
+        "\n[dim]The closed form is an infinite-horizon probability. A finite "
+        "playing career carries less ruin risk than it quotes; the two converge "
+        "only once the horizon is long compared with the time the edge needs to "
+        "carry the bankroll clear.[/dim]\n"
+    )
 
 
 @app.command()

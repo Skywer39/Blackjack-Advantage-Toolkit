@@ -21,3 +21,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# The Monte Carlo validation tests need long horizons to say anything, so they
+# are opt-in: `pytest` stays fast, `pytest -m slow` runs the real validation.
+addopts = "-m 'not slow'"
+markers = ["slow: long-horizon Monte Carlo validation (minutes, not seconds)"]
