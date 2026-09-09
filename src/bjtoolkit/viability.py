@@ -188,7 +188,6 @@ def penetration_sweep(
 ) -> list[dict]:
     """How the game changes as the dealer cuts deeper. Usually the biggest lever."""
     if penetrations is None:
-        step = rules.decks / 12.0
         penetrations = tuple(
             round(rules.decks * f, 2) for f in (0.5, 0.58, 0.67, 0.75, 0.83, 0.88)
         )

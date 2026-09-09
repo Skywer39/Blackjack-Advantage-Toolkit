@@ -10,13 +10,13 @@ import dataclasses
 import json as jsonlib
 import math
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import constants as C
+from .analyzer import Action
+from .cards import RANK_NAMES
 from .counting import SYSTEMS
 from .ev_model import breakeven_tc, ev_at_tc, ev_sensitivity
 from .frequency import load_or_simulate
@@ -25,15 +25,23 @@ from .risk import (
     bankroll_for_ror,
     evaluate,
     kelly_for_ror,
-    risk_of_ruin,
     ror_for_kelly,
 )
-from .rules import PRESETS, RuleSet, base_edge, base_edge_range, edge_components, get_preset
+from .rules import (
+    PRESETS,
+    RuleSet,
+    base_edge,
+    base_edge_range,
+    edge_components,
+    get_preset,
+)
 from .simulate import ruin_convergence, simulate
-from .analyzer import Action, clear_caches
-from .cards import RANK_NAMES
 from .strategy import (
-    UPCARDS, all_deviations, basic_strategy, decide, insurance_index,
+    UPCARDS,
+    all_deviations,
+    basic_strategy,
+    decide,
+    insurance_index,
     rank_deviations,
 )
 from .viability import assess, penetration_sweep
@@ -47,13 +55,13 @@ console = Console()
 
 def _load_rules(
     preset: str,
-    config: Optional[Path],
-    decks: Optional[int],
-    pen: Optional[float],
-    table_min: Optional[float],
-    table_max: Optional[float],
-    h17: Optional[bool],
-    players: Optional[int],
+    config: Path | None,
+    decks: int | None,
+    pen: float | None,
+    table_min: float | None,
+    table_max: float | None,
+    h17: bool | None,
+    players: int | None,
 ) -> RuleSet:
     if config is not None:
         rules = RuleSet.model_validate_json(config.read_text())
@@ -107,8 +115,15 @@ def _dump(obj) -> str:
 
 
 @app.command()
-def presets() -> None:
+def presets(json: bool = P_JSON) -> None:
     """List the built-in rule sets."""
+    if json:
+        typer.echo(_dump([
+            {"key": key, "rules": r, "base_edge": base_edge(r),
+             "breakeven_tc": breakeven_tc(r)}
+            for key, r in PRESETS.items()
+        ]))
+        return
     t = Table(title="Presets")
     for c in ("key", "game", "decks", "pen", "edge", "table"):
         t.add_column(c)
@@ -126,10 +141,10 @@ def presets() -> None:
 
 @app.command()
 def rules(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     json: bool = P_JSON,
 ) -> None:
     """Show a rule set and where its house edge comes from."""
@@ -176,10 +191,10 @@ def rules(
 
 @app.command()
 def freq(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     system: str = typer.Option("hi-lo", "--system", help="Counting system."),
     regen: bool = typer.Option(False, "--regen", help="Force re-simulation."),
     shoes: int = typer.Option(40_000, "--shoes", help="Shoes to simulate."),
@@ -201,8 +216,10 @@ def freq(
     t = Table(title=f"True-count distribution ({d.system}, {r.decks}D, "
                     f"{r.penetration_decks_dealt:g} decks dealt, "
                     f"{d.rounds_per_shoe:.0f} rounds/shoe)")
-    t.add_column("TC"); t.add_column("P", justify="right")
-    t.add_column("cumulative >=", justify="right"); t.add_column("edge", justify="right")
+    t.add_column("TC")
+    t.add_column("P", justify="right")
+    t.add_column("cumulative >=", justify="right")
+    t.add_column("edge", justify="right")
     for tc in d.counts():
         if d.p(tc) < 5e-4:
             continue
@@ -215,16 +232,16 @@ def freq(
 
 @app.command()
 def ramp(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     bankroll: float = typer.Option(..., "--bankroll", "-b"),
     kelly: float = typer.Option(0.40, "--kelly", help="Fraction of full Kelly."),
-    max_spread: Optional[float] = typer.Option(
+    max_spread: float | None = typer.Option(
         None, "--max-spread", help="Cover limit on your top bet, as a multiple of the minimum."
     ),
-    wong: Optional[int] = typer.Option(
+    wong: int | None = typer.Option(
         None, "--wong-out-below", help="Sit out rounds below this true count."
     ),
     json: bool = P_JSON,
@@ -291,16 +308,16 @@ def _print_report(rep, r: RuleSet, spread: float) -> None:
 
 @app.command()
 def risk(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     bankroll: float = typer.Option(..., "--bankroll", "-b"),
     kelly: float = typer.Option(0.40, "--kelly"),
     hours: float = typer.Option(100.0, "--hours"),
     rounds_per_hour: int = typer.Option(70, "--rounds-per-hour"),
-    max_spread: Optional[float] = typer.Option(None, "--max-spread"),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    max_spread: float | None = typer.Option(None, "--max-spread"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     json: bool = P_JSON,
 ) -> None:
     """Full risk report for a bankroll and ramp."""
@@ -326,14 +343,14 @@ def risk(
 
 @app.command()
 def bankroll(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     target_ror: float = typer.Option(0.05, "--target-ror"),
     spread: float = typer.Option(12, "--spread", help="Bet spread you intend to use."),
-    unit: Optional[float] = typer.Option(None, "--unit", help="Bottom bet. Defaults to the table minimum."),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    unit: float | None = typer.Option(None, "--unit", help="Bottom bet. Defaults to the table minimum."),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     json: bool = P_JSON,
 ) -> None:
     """How much bankroll a given spread needs. The non-circular solve."""
@@ -373,14 +390,14 @@ def bankroll(
 
 @app.command()
 def viability(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
-    bankroll: Optional[float] = typer.Option(None, "--bankroll", "-b"),
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
+    bankroll: float | None = typer.Option(None, "--bankroll", "-b"),
     target_ror: float = typer.Option(0.05, "--target-ror"),
-    unit: Optional[float] = typer.Option(None, "--unit"),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    unit: float | None = typer.Option(None, "--unit"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     json: bool = P_JSON,
 ) -> None:
     """Should you play this game at all? Start here."""
@@ -432,14 +449,14 @@ def viability(
 
 @app.command("pen-sweep")
 def pen_sweep(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, table_min: Optional[float] = P_MIN,
-    table_max: Optional[float] = P_MAX, h17: Optional[bool] = P_H17,
-    players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, table_min: float | None = P_MIN,
+    table_max: float | None = P_MAX, h17: bool | None = P_H17,
+    players: int | None = P_PLAYERS,
     spread: float = typer.Option(12, "--spread"),
     target_ror: float = typer.Option(0.05, "--target-ror"),
-    unit: Optional[float] = typer.Option(None, "--unit"),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    unit: float | None = typer.Option(None, "--unit"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     json: bool = P_JSON,
 ) -> None:
     """How much the dealer's cut card is worth to you."""
@@ -482,17 +499,17 @@ def _sim_ramp(r, d, bankroll, spread, kelly, unit, wong):
 
 @app.command()
 def sim(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     bankroll: float = typer.Option(..., "--bankroll", "-b"),
     spread: float = typer.Option(8, "--spread", help="Fixed spread to play."),
-    kelly: Optional[float] = typer.Option(
+    kelly: float | None = typer.Option(
         None, "--kelly", help="Play a Kelly ramp instead of a fixed spread."
     ),
-    unit: Optional[float] = typer.Option(None, "--unit"),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    unit: float | None = typer.Option(None, "--unit"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     paths: int = typer.Option(10_000, "--paths", help="Bankrolls to simulate."),
     hands: int = typer.Option(100_000, "--hands", help="Rounds per path."),
     ruin_at: float = typer.Option(
@@ -527,14 +544,16 @@ def sim(
         f"{'resized each round' if resize else 'ramp fixed'}\n"
     )
     t = Table(title="Risk of ruin")
-    t.add_column("source"); t.add_column("value", justify="right")
+    t.add_column("source")
+    t.add_column("value", justify="right")
     t.add_row("analytic (closed form, infinite horizon)", f"{res.analytic_ror:.2%}")
     t.add_row(f"simulated over {hands:,} rounds", f"{res.empirical_ror:.2%}")
     t.add_row("difference", f"{res.ror_gap_points:+.2f} points")
     console.print(t)
 
     t2 = Table(title=f"Final bankroll after {hands:,} rounds")
-    t2.add_column("percentile"); t2.add_column("bankroll", justify="right")
+    t2.add_column("percentile")
+    t2.add_column("bankroll", justify="right")
     for k, v in res.final_percentiles.items():
         t2.add_row(k.upper(), _money(v, r.currency))
     console.print(t2)
@@ -550,14 +569,14 @@ def sim(
 
 @app.command()
 def validate(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     bankroll: float = typer.Option(..., "--bankroll", "-b"),
     spread: float = typer.Option(8, "--spread"),
-    unit: Optional[float] = typer.Option(None, "--unit"),
-    wong: Optional[int] = typer.Option(None, "--wong-out-below"),
+    unit: float | None = typer.Option(None, "--unit"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
     paths: int = typer.Option(5_000, "--paths"),
     seed: int = typer.Option(1234, "--seed"),
     json: bool = P_JSON,
@@ -600,10 +619,10 @@ _COLOUR = {
 
 @app.command()
 def chart(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     tc: float = typer.Option(0.0, "--tc", help="True count to compute the chart at."),
     mark_close: bool = typer.Option(
         True, "--mark-close/--no-mark-close",
@@ -658,10 +677,10 @@ def chart(
 
 @app.command()
 def deviations(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     top: int = typer.Option(18, "--top", help="How many to show. 0 for all."),
     lo: int = typer.Option(-6, "--min-tc"),
     hi: int = typer.Option(8, "--max-tc"),
@@ -711,10 +730,10 @@ def deviations(
 
 @app.command()
 def play(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     hand: str = typer.Argument(..., help="Your cards, e.g. 'A,7' or 'T,6' or '5,6'."),
     upcard: str = typer.Argument(..., help="Dealer upcard, e.g. 'T' or '9'."),
     tc: float = typer.Option(0.0, "--tc", help="Current true count."),
@@ -749,7 +768,8 @@ def play(
     console.print(f"\n[bold]{hand.upper()} vs {RANK_NAMES[up]}[/bold] at true "
                   f"count {tc:+g}  ->  [bold green]{action.value.upper()}[/bold green]")
     t = Table()
-    t.add_column("action"); t.add_column("EV", justify="right")
+    t.add_column("action")
+    t.add_column("EV", justify="right")
     for a, v in sorted(evs.items(), key=lambda kv: -kv[1]):
         t.add_row(a.value, f"{v:+.4f}")
     console.print(t)
@@ -758,10 +778,10 @@ def play(
 
 @app.command()
 def sensitivity(
-    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
-    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
-    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
-    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
     tc: float = typer.Option(3.0, "--tc", help="True count to evaluate at."),
     json: bool = P_JSON,
 ) -> None:

@@ -246,3 +246,22 @@ def test_deviations_command_runs_over_a_narrow_count_range():
     rows = run_json("deviations", "-p", "ambassador", "--top", "3",
                     "--min-tc", "-1", "--max-tc", "1")
     assert all("index" in r and "value_bp_per_round" in r for r in rows)
+
+
+def test_every_command_supports_json():
+    """The --json contract is what a web UI would consume, so it must be total."""
+    import inspect
+
+    missing = [
+        c.name or c.callback.__name__
+        for c in app.registered_commands
+        if "json" not in inspect.signature(c.callback).parameters
+    ]
+    assert not missing, f"commands without --json: {missing}"
+
+
+def test_presets_json_lists_every_preset():
+    rows = run_json("presets")
+    keys = {r["key"] for r in rows}
+    assert {"ambassador", "vegas-strip", "six-five"} <= keys
+    assert all(r["base_edge"] < 0 for r in rows)

@@ -9,7 +9,7 @@ counted as eleven and could be dropped to one if the hand would otherwise bust.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 
 RANKS = tuple(range(10))
 TEN, ACE = 8, 9
@@ -45,7 +45,7 @@ def total_cards(deck: Deck) -> int:
     return sum(deck)
 
 
-@lru_cache(maxsize=None)
+@cache
 def draw_probs(deck: Deck) -> tuple[float, ...]:
     """P(next card is each rank), given what is left in the shoe."""
     n = sum(deck)

@@ -3,8 +3,15 @@
 import pytest
 
 from bjtoolkit.rules import (
-    DoubleRule, HoleCard, RuleSet, Surrender,
-    base_edge, base_edge_range, edge_components, get_preset, PRESETS,
+    PRESETS,
+    DoubleRule,
+    HoleCard,
+    RuleSet,
+    Surrender,
+    base_edge,
+    base_edge_range,
+    edge_components,
+    get_preset,
 )
 
 # Published house edges for standard games, and how close we insist on being.

@@ -12,10 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 _CACHE = tempfile.TemporaryDirectory()
 os.environ["BJTOOLKIT_CACHE_DIR"] = _CACHE.name
 
-import pytest
+# These imports must follow the sys.path and cache-directory setup above, so
+# the usual "imports at top of file" rule does not apply here.
+import pytest  # noqa: E402
 
-from bjtoolkit.frequency import simulate_tc_distribution
-from bjtoolkit.rules import get_preset
+from bjtoolkit.frequency import simulate_tc_distribution  # noqa: E402
+from bjtoolkit.rules import get_preset  # noqa: E402
 
 
 @pytest.fixture(scope="session")

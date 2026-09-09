@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "pydantic>=2.5", "typer>=0.9", "rich>=13.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4"]
+dev = ["pytest>=7.4", "ruff>=0.5"]
 
 [project.scripts]
 bj = "bjtoolkit.cli:app"
@@ -25,3 +25,15 @@ pythonpath = ["src"]
 # are opt-in: `pytest` stays fast, `pytest -m slow` runs the real validation.
 addopts = "-m 'not slow'"
 markers = ["slow: long-horizon Monte Carlo validation (minutes, not seconds)"]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",   # long lines are usually prose in docstrings
+    "UP042",  # str+Enum is deliberate: pydantic and typer both rely on the
+              # members being real strings, which StrEnum changes subtly
+]

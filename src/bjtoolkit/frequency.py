@@ -79,7 +79,7 @@ class TCDistribution:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "TCDistribution":
+    def from_dict(cls, d: dict) -> TCDistribution:
         return cls(
             probs={int(k): float(v) for k, v in d["probs"].items()},
             decks=d["decks"],

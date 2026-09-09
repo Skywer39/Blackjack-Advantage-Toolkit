@@ -9,11 +9,15 @@ both are correct for the rule set you actually hand them.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
 
 from .analyzer import Action, action_evs, best_action
 from .cards import (
-    ACE, RANK_NAMES, RANKS, TEN, deck_for_true_count, hand_from, remove_many,
+    ACE,
+    RANK_NAMES,
+    RANKS,
+    TEN,
+    deck_for_true_count,
+    remove_many,
 )
 from .rules import RuleSet
 

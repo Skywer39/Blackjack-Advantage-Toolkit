@@ -6,9 +6,12 @@ import pytest
 
 from bjtoolkit.ramp import kelly_ramp, spread_ramp
 from bjtoolkit.risk import evaluate
-from bjtoolkit.rules import get_preset
 from bjtoolkit.simulate import (
-    BASE_OUTCOMES, _base_arrays, collapse_to_atoms, ruin_convergence, simulate,
+    BASE_OUTCOMES,
+    _base_arrays,
+    collapse_to_atoms,
+    ruin_convergence,
+    simulate,
 )
 
 

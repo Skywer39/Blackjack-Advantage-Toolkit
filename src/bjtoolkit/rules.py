@@ -79,7 +79,7 @@ class RuleSet(BaseModel):
     currency: str = "CZK"
 
     @model_validator(mode="after")
-    def _check(self) -> "RuleSet":
+    def _check(self) -> RuleSet:
         if self.penetration_decks_dealt >= self.decks:
             raise ValueError(
                 f"penetration_decks_dealt ({self.penetration_decks_dealt}) must be "

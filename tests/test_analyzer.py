@@ -4,9 +4,14 @@ arithmetic identities that must hold whatever the rules are."""
 import pytest
 
 from bjtoolkit.analyzer import (
-    ACE, Action, action_evs, dealer_outcomes, ev_stand, prob_dealer_blackjack,
+    ACE,
+    Action,
+    action_evs,
+    dealer_outcomes,
+    ev_stand,
+    prob_dealer_blackjack,
 )
-from bjtoolkit.cards import TEN, fresh_deck, hand_from, remove_many
+from bjtoolkit.cards import TEN, fresh_deck, remove_many
 from bjtoolkit.rules import HoleCard, RuleSet, Surrender, get_preset
 
 
@@ -203,3 +208,25 @@ def test_every_ev_is_within_the_possible_range(deck6):
         evs = action_evs((7, 7), up, remove_many(deck6, 7, 7, up), r)
         for action, v in evs.items():
             assert -2.5 <= v <= 2.5, (up, action, v)
+
+
+def test_memo_tables_are_bounded():
+    """An unbounded cache is a slow memory leak here: every true count makes a
+    fresh family of deck tuples that will never be looked up again."""
+    from bjtoolkit.analyzer import _MEMO, _play_out, dealer_outcomes, ev_hit
+    for fn in (_play_out, dealer_outcomes, ev_hit):
+        assert fn.cache_info().maxsize == _MEMO
+    assert _MEMO <= 500_000
+
+
+def test_clear_caches_empties_them(deck6):
+    from bjtoolkit.analyzer import clear_caches
+    dealer_outcomes(4, remove_many(deck6, 4), False, True)
+    assert _play_out_size() > 0
+    clear_caches()
+    assert _play_out_size() == 0
+
+
+def _play_out_size():
+    from bjtoolkit.analyzer import _play_out
+    return _play_out.cache_info().currsize

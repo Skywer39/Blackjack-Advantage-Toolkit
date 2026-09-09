@@ -2,7 +2,7 @@ import pytest
 
 from bjtoolkit import constants as C
 from bjtoolkit.ev_model import breakeven_tc, ev_at_tc, ev_sensitivity, variance_at_tc
-from bjtoolkit.rules import RuleSet, get_preset
+from bjtoolkit.rules import get_preset
 
 
 def test_linear_in_true_count():

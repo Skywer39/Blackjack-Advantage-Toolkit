@@ -2,7 +2,6 @@ import pytest
 
 from bjtoolkit.ev_model import ev_at_tc
 from bjtoolkit.ramp import kelly_ramp, round_to_unit, spread_ramp
-from bjtoolkit.rules import get_preset
 
 
 def test_round_to_unit():

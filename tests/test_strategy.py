@@ -5,11 +5,19 @@ import pytest
 
 from bjtoolkit.analyzer import Action
 from bjtoolkit.cards import ACE, TEN, hand_from
-from bjtoolkit.rules import HoleCard, Surrender, get_preset
+from bjtoolkit.rules import get_preset
 from bjtoolkit.strategy import (
-    UPCARDS, all_deviations, basic_strategy, cards_for_hard, cards_for_pair,
-    cards_for_soft, decide, evaluate_cell, find_deviation, hard_compositions,
-    insurance_index, rank_deviations,
+    UPCARDS,
+    all_deviations,
+    basic_strategy,
+    cards_for_hard,
+    cards_for_soft,
+    decide,
+    evaluate_cell,
+    find_deviation,
+    hard_compositions,
+    insurance_index,
+    rank_deviations,
 )
 
 SYM = {Action.HIT: "H", Action.STAND: "S", Action.DOUBLE: "D",

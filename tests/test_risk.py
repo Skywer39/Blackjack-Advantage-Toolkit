@@ -4,7 +4,11 @@ import pytest
 
 from bjtoolkit.ramp import kelly_ramp, spread_ramp
 from bjtoolkit.risk import (
-    bankroll_for_ror, evaluate, kelly_for_ror, risk_of_ruin, ror_for_kelly,
+    bankroll_for_ror,
+    evaluate,
+    kelly_for_ror,
+    risk_of_ruin,
+    ror_for_kelly,
 )
 from bjtoolkit.rules import get_preset
 
