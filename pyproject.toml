@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bjtoolkit"
+version = "0.1.0"
+description = "Bankroll, bet ramp and risk analysis for card counting, for any set of table rules"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pydantic>=2.5", "typer>=0.9", "rich>=13.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+bj = "bjtoolkit.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
