@@ -22,16 +22,16 @@ bj viability --preset ambassador --bankroll 100000
 ```
 
 ```
-Off the top: -0.45% (-0.52% .. -0.39%)   Break-even TC: +0.90
+Off the top: -0.45% (-0.52% .. -0.39%)   Break-even TC: +0.84
 You hold an advantage on 27% of rounds
 
  spread   top bet  bankroll needed  win/hour  N0 hours
-     8x  CZK 1,600            -      CZK -11         -   EV-negative
-    12x  CZK 2,400  CZK 1,067,398     CZK 15    47,920   unaffordable
-    20x  CZK 4,000    CZK 428,386     CZK 86     3,342   unaffordable
+     6x  CZK 1,200            -      CZK -14         -   EV-negative
+    12x  CZK 2,400    CZK 616,509     CZK 28    14,823   unaffordable
+    20x  CZK 4,000    CZK 370,061    CZK 101     2,442   unaffordable
 
 NOT VIABLE at CZK 100,000. The smallest spread that beats this game
-needs about CZK 428,386 for 5% risk of ruin.
+needs about CZK 370,061 for 5% risk of ruin.
 ```
 
 That is a real answer, not a failure. A CZK 200 table minimum is a high floor:
@@ -44,9 +44,9 @@ bj viability --preset ambassador --bankroll 100000 --wong-out-below 1
 ```
 
 ```
-     8x  CZK 1,600     CZK 94,158     CZK 77       821   ok
+     8x  CZK 1,600     CZK 93,136     CZK 93       672   ok
 
-VIABLE at up to 8x spread: about CZK 77/hour, needing CZK 94,158
+VIABLE at up to 8x spread: about CZK 93/hour, needing CZK 93,136
 bankroll for 5% risk of ruin.
 ```
 
@@ -69,6 +69,7 @@ positive counts is what makes a high minimum survivable.
 | `bj deviations` | Index numbers, ranked by what each is actually worth |
 | `bj play` | The correct play for one hand at one count |
 | `bj rules` | Where does this game's house edge come from? |
+| `bj verify` | Check the model's constants against an exact enumeration |
 | `bj sensitivity` | Which uncertain inputs actually move my conclusions? |
 | `bj presets` | What games are built in? |
 
@@ -98,12 +99,12 @@ bj pen-sweep --preset ambassador --spread 12 --wong-out-below 1
 
 | decks dealt | % of shoe | P(TC≥2) | P(TC≥4) | win/hour | bankroll needed |
 |---|---|---|---|---|---|
-| 3.0 | 50% | 0.084 | 0.011 | CZK 42 | CZK 188,392 |
-| 4.0 | 67% | 0.128 | 0.031 | CZK 69 | CZK 122,310 |
-| 5.0 | 83% | 0.169 | 0.063 | CZK 154 | CZK 110,981 |
+| 3.0 | 50% | 0.084 | 0.011 | CZK 47 | CZK 168,876 |
+| 4.0 | 67% | 0.128 | 0.031 | CZK 79 | CZK 115,801 |
+| 5.0 | 83% | 0.169 | 0.063 | CZK 176 | CZK 106,624 |
 
 Same rules, same spread, same play. Deep penetration is worth 3.7x the win rate
-of shallow, and needs 40% less bankroll to sustain — decided entirely by where
+of shallow, and needs 37% less bankroll to sustain — decided entirely by where
 the dealer puts the cut card. Counts of +4 and up, where most of the money is,
 occur five times as often.
 
@@ -114,9 +115,9 @@ the result with the closed form Phase 1 quotes:
 
 | rounds played | simulated RoR | analytic RoR | gap |
 |---|---|---|---|
-| 20,000 | 0.13% | 5.00% | −4.87 pts |
-| 50,000 | 1.62% | 5.00% | −3.38 pts |
-| 100,000 | 3.47% | 5.00% | −1.53 pts |
+| 20,000 | 0.33% | 5.00% | −4.67 pts |
+| 50,000 | 2.08% | 5.00% | −2.92 pts |
+| 100,000 | 3.55% | 5.00% | −1.45 pts |
 | 200,000 | 4.63% | 5.00% | −0.37 pts |
 
 The closed form is sound and slightly conservative. It is also an *infinite*
@@ -124,8 +125,37 @@ horizon figure — over a first season of a few hundred hours your real risk is 
 small fraction of the quoted 5%.
 
 The most useful thing the simulator turned up: **resizing your unit as the
-bankroll moves cuts risk of ruin from 4.25% to 0.47%**, at a cost of about 4% of
-the median outcome. Full results and caveats in `docs/validation.md`.
+bankroll moves cuts risk of ruin from 4.23% to 0.35%** — for nothing at the
+median, and a better bad tail. Full results and caveats in `docs/validation.md`.
+
+## The constants are checked against an exact enumeration
+
+`bj verify` enumerates every initial deal, weights each by its probability and
+takes the exact EV of the best action — no sampling error at all. This is what
+validates the numbers Phase 1 sizes bankrolls from.
+
+The spec proposed a full-hand simulator for this. It cannot work: a 0.45% edge
+against a per-hand standard deviation of 1.15 needs roughly 130 million hands to
+resolve to a hundredth of a percent. Enumeration gets there exactly, in seconds.
+
+| preset | model | exact | error |
+|---|---|---|---|
+| vegas-strip | −0.3300% | −0.3337% | −0.0037% |
+| vegas-8d | −0.6500% | −0.6469% | +0.0031% |
+| ambassador | −0.4500% | −0.4452% | +0.0048% |
+| uk-enhc | −0.5200% | −0.5178% | +0.0022% |
+
+The rule-effect constants hold up to well under a basis point. Two things it did
+turn up, in `docs/validation.md`:
+
+* **A real bug in the analyzer.** Splits were modelled without resplitting,
+  which cost about 0.05% — five times the error of everything else combined.
+  Fixed; the published chart still reproduces exactly.
+* **The Hi-Lo slope was too low.** The usual 0.5%-per-true-count rule of thumb
+  measures 0.535% over the counts you actually bet in, stable across shoe
+  depths. The curve is also convex, reaching 0.70% above +6. Correcting it moved
+  the Ambassador win rate from CZK 77/hour to CZK 93 — the tool had been
+  understating its own edge by about 20%.
 
 ## Strategy is computed, not transcribed
 
@@ -173,11 +203,14 @@ rest on.
 
 ## Honest limits
 
-Read `docs/open-questions.md` before betting real money. In short: the EV model
-is linear and approximate; the rule-effect constants are reconstructed from
-published tables rather than recomputed; **nothing here models heat**, so every
-win rate is an upper bound; and the vs-Ace doubling indices on the companion
-chart look wrong for a full-ENHC game and are flagged as unresolved.
+Read `docs/open-questions.md` before betting real money. The EV model and its
+constants are now verified against exact enumeration, and the chart's vs-Ace
+indices are resolved. What remains: the linear EV model is still a straight line
+through a convex curve, so it understates the edge above about +6; **nothing
+here models heat**, so every win rate is an upper bound; and two rules of your
+actual game — whether it is really S17, and how surrender settles with no hole
+card — are still unconfirmed and together worth more than any modelling
+improvement left in this repo.
 
 N0 is the number that deserves the most attention. At most realistic bankrolls
 it is several hundred hours — the point at which your expected win merely equals

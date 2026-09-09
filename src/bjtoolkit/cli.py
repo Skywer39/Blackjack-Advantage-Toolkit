@@ -15,10 +15,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from . import constants as C
 from .analyzer import Action
 from .cards import RANK_NAMES
 from .counting import SYSTEMS
 from .ev_model import breakeven_tc, ev_at_tc, ev_sensitivity
+from .exact import ev_curve, exact_edge, fit_linear
 from .frequency import load_or_simulate
 from .ramp import kelly_ramp, spread_ramp
 from .risk import (
@@ -774,6 +776,66 @@ def play(
         t.add_row(a.value, f"{v:+.4f}")
     console.print(t)
     console.print()
+
+
+@app.command()
+def verify(
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
+    lo: int = typer.Option(-3, "--min-tc", help="Low end of the fitted range."),
+    hi: int = typer.Option(6, "--max-tc", help="High end of the fitted range."),
+    json: bool = P_JSON,
+) -> None:
+    """Check the model's constants against an exact enumeration of the game."""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    measured = exact_edge(r)
+    modelled = base_edge(r)
+    curve = ev_curve(r, tuple(range(lo, hi + 1)))
+    _, slope, worst = fit_linear(curve)
+
+    if json:
+        typer.echo(_dump({
+            "rules": r,
+            "base_edge_model": modelled,
+            "base_edge_exact": measured,
+            "base_edge_error": measured - modelled,
+            "slope_model": C.HILO_SLOPE.value,
+            "slope_exact": slope,
+            "slope_error": slope - C.HILO_SLOPE.value,
+            "worst_linear_residual": worst,
+            "curve": {str(k): v for k, v in curve.items()},
+        }))
+        return
+
+    console.print(f"\n[bold]{r.name}[/bold]\n")
+    t = Table(title="Model constants against exact enumeration")
+    for c in ("quantity", "model", "exact", "error"):
+        t.add_column(c, justify="right" if c != "quantity" else "left")
+    t.add_row("off-the-top edge", f"{modelled * 100:+.4f}%",
+              f"{measured * 100:+.4f}%", f"{(measured - modelled) * 100:+.4f}%")
+    t.add_row(f"slope over TC {lo:+d}..{hi:+d}", f"{C.HILO_SLOPE.value * 100:.4f}%",
+              f"{slope * 100:.4f}%", f"{(slope - C.HILO_SLOPE.value) * 100:+.4f}%")
+    console.print(t)
+
+    t2 = Table(title="Exact EV by true count")
+    for c in ("TC", "exact", "linear model", "error"):
+        t2.add_column(c, justify="right")
+    for tc, v in curve.items():
+        m = ev_at_tc(tc, r)
+        t2.add_row(f"{tc:+.0f}", f"{v * 100:+.4f}%", f"{m * 100:+.4f}%",
+                   f"{(v - m) * 100:+.4f}%")
+    console.print(t2)
+    console.print(
+        f"\n[dim]Worst departure from a straight line over this range: "
+        f"{worst * 100:.4f}%. The curve is convex, so a linear model understates "
+        f"the edge at high counts -- the conservative direction, since that is "
+        f"where the bets are big.\n"
+        f"The TC-0 point is not the off-the-top edge: this curve is evaluated "
+        f"against a half-dealt shoe, which plays slightly better for the "
+        f"player.[/dim]\n"
+    )
 
 
 @app.command()

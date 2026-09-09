@@ -200,36 +200,65 @@ def ev_double(
     return 2.0 * acc
 
 
-def ev_split(
-    rank: int, deck: Deck, dealer: tuple[float, ...], rules: RuleSet
+def _split_hand_ev(
+    rank: int,
+    deck: Deck,
+    dealer: tuple[float, ...],
+    rules: RuleSet,
+    splits_left: int,
 ) -> float:
-    """EV of splitting a pair, in units of the ORIGINAL bet.
+    """EV of ONE hand produced by a split, in units of the bet on that hand.
 
-    Uses the standard approximation: value one post-split hand and double it,
-    without modelling resplits. Resplitting is a small positive option, so this
-    slightly understates the value of splitting -- most in the low pairs against
-    weak upcards, where splitting already wins comfortably, and least in the
-    marginal cells where a chart could actually flip. Split aces receive one
-    card only, which is modelled exactly.
+    Draws the hand's second card; if it matches the split rank and the rules
+    still allow another split, the hand becomes two hands and this recurses.
+    Split aces take one card and cannot be resplit unless the rules say so.
+
+    The approximation that remains is that the hands are treated as drawing
+    independently from the same shoe rather than in sequence. That is the
+    standard treatment and is worth well under a hundredth of a percent.
     """
     probs = draw_probs(deck)
-    one_hand = 0.0
+    acc = 0.0
     aces = rank == ACE
     for draw in RANKS:
         p = probs[draw]
         if p <= 0.0:
             continue
-        total, soft = add_card(0, False, rank)
-        total, soft = add_card(total, soft, draw)
         sub = remove(deck, draw)
+
+        may_resplit = (
+            draw == rank
+            and splits_left > 0
+            and (not aces or rules.resplit_aces)
+        )
+        if may_resplit:
+            acc += p * 2.0 * _split_hand_ev(rank, sub, dealer, rules,
+                                            splits_left - 1)
+            continue
+
+        total, soft = add_card(*add_card(0, False, rank), draw)
         if aces:
-            one_hand += p * ev_stand(total, dealer)
+            acc += p * ev_stand(total, dealer)
             continue
         best = max(ev_stand(total, dealer), ev_hit(total, soft, sub, dealer))
         if rules.double_after_split and _may_double(total, soft, rules):
             best = max(best, ev_double(total, soft, sub, dealer))
-        one_hand += p * best
-    return 2.0 * one_hand
+        acc += p * best
+    return acc
+
+
+def ev_split(
+    rank: int, deck: Deck, dealer: tuple[float, ...], rules: RuleSet
+) -> float:
+    """EV of splitting a pair, in units of the ORIGINAL bet.
+
+    Models resplitting up to `rules.max_split_hands`, which matters more than it
+    sounds: drawing a third card of the split rank happens on roughly one split
+    hand in thirteen, and playing that as a hard total instead of splitting it
+    again costs real money.
+    """
+    extra_splits = max(0, rules.max_split_hands - 2)
+    return 2.0 * _split_hand_ev(rank, deck, dealer, rules, extra_splits)
 
 
 def _may_double(total: int, soft: bool, rules: RuleSet) -> bool:

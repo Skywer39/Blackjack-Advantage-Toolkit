@@ -126,9 +126,19 @@ ENHC_ALL_BETS_LOST = E(-0.00110, -0.00130, -0.00090, GRIFFIN)
 # ---------------------------------------------------------------------------
 # Counting
 # ---------------------------------------------------------------------------
-# Player edge gained per +1 true count, Hi-Lo. Fairly insensitive to rules and
-# to deck count; the betting correlation of Hi-Lo (~0.97) is what sets it.
-HILO_SLOPE = E(0.00500, 0.00450, 0.00550, SCHLESINGER)
+# Player edge gained per +1 true count, Hi-Lo.
+#
+# Measured with this project's own exact analyzer (`bj verify`) rather than
+# taken from the usual 0.5% rule of thumb. Least-squares fit over true counts
+# -3 to +6 -- the range you actually bet in -- gives 0.0053 to 0.0054, and it is
+# stable across shoe depths from 1.5 to 4 decks remaining, which is a good sign
+# that the true-count normalisation is doing its job.
+#
+# The real curve is convex: above about +6 the local slope rises toward 0.0070,
+# so a straight line increasingly understates the edge at high counts. That is
+# the conservative direction for a planning tool, since high counts are exactly
+# where the bets are large. See docs/validation.md.
+HILO_SLOPE = E(0.00535, 0.00500, 0.00570, "computed: bjtoolkit exact analyzer")
 
 # Variance per unit wagered, flat-betting basic strategy. Rises at high counts
 # because you double and split more often -- see HAND_VARIANCE_TC_SLOPE.

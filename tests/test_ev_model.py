@@ -18,9 +18,14 @@ def test_monotonic_increasing():
     assert evs == sorted(evs)
 
 
-def test_slope_is_half_a_percent_per_count():
+def test_slope_matches_the_measured_constant():
+    """The rule of thumb is half a percent per true count. Measured with the
+    exact analyzer over the counts you actually bet in it is 0.535%, which is
+    what the constant now carries -- see docs/validation.md section 8."""
     r = get_preset("ambassador")
-    assert ev_at_tc(1, r) - ev_at_tc(0, r) == pytest.approx(0.005, abs=1e-9)
+    step = ev_at_tc(1, r) - ev_at_tc(0, r)
+    assert step == pytest.approx(C.HILO_SLOPE.value, abs=1e-9)
+    assert step == pytest.approx(0.00535, abs=1e-5)
 
 
 def test_ev_at_zero_is_the_base_edge():
