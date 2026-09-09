@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import json as jsonlib
 import math
+import time
 from pathlib import Path
 
 import typer
@@ -46,6 +47,7 @@ from .strategy import (
     insurance_index,
     rank_deviations,
 )
+from .trainer import KINDS, Progress, Trainer, default_progress_path
 from .viability import assess, penetration_sweep
 
 app = typer.Typer(
@@ -774,6 +776,142 @@ def play(
     t.add_column("EV", justify="right")
     for a, v in sorted(evs.items(), key=lambda kv: -kv[1]):
         t.add_row(a.value, f"{v:+.4f}")
+    console.print(t)
+    console.print()
+
+
+@app.command()
+def drill(
+    preset: str = P_PRESET, config: Path | None = P_CONFIG,
+    decks: int | None = P_DECKS, pen: float | None = P_PEN,
+    table_min: float | None = P_MIN, table_max: float | None = P_MAX,
+    h17: bool | None = P_H17, players: int | None = P_PLAYERS,
+    kinds: str = typer.Option(
+        "count,truecount,strategy,deviation", "--kinds",
+        help=f"Comma-separated drill types from: {', '.join(KINDS)}.",
+    ),
+    rounds: int = typer.Option(20, "--rounds", "-n", help="Questions to ask."),
+    cards: int = typer.Option(
+        12, "--cards", help="Cards per counting question."
+    ),
+    bankroll: float | None = typer.Option(
+        None, "--bankroll", "-b", help="Enables the betting drill."
+    ),
+    kelly: float = typer.Option(0.40, "--kelly"),
+    wong: int | None = typer.Option(None, "--wong-out-below"),
+    reset: bool = typer.Option(False, "--reset", help="Erase saved progress."),
+    stats: bool = typer.Option(False, "--stats", help="Show progress and exit."),
+    seed: int | None = typer.Option(None, "--seed"),
+    json: bool = P_JSON,
+) -> None:
+    """Drill counting, strategy and deviations for your own rules.
+
+    With --json, emits your progress instead of running an interactive session:
+    the summary plus your weakest items, which is what a study UI would show.
+    """
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    path = default_progress_path()
+
+    if reset:
+        if path.exists():
+            path.unlink()
+        console.print("[yellow]Progress erased.[/yellow]")
+        if not stats:
+            return
+
+    progress = Progress.load()
+
+    if stats or json:
+        if json:
+            typer.echo(_dump({
+                "summary": progress.summary(),
+                "weakest": [
+                    {"item": k, "seen": st.seen, "correct": st.correct,
+                     "accuracy": st.accuracy, "mean_seconds": st.mean_seconds}
+                    for k, st in progress.weakest(20)
+                ],
+            }))
+        else:
+            _show_progress(progress)
+        return
+
+    ramp = None
+    if bankroll is not None:
+        dist = load_or_simulate(r)
+        ramp = kelly_ramp(r, dist, bankroll=bankroll, kelly_fraction=kelly,
+                          wong_out_below=wong).bets
+
+    selected = tuple(k.strip() for k in kinds.split(",") if k.strip())
+    try:
+        trainer = Trainer(r, progress=progress, kinds=selected, seed=seed,
+                          cards_per_count_question=cards, ramp=ramp)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    if "strategy" in selected or "deviation" in selected:
+        console.print("[dim]Preparing the chart for these rules...[/dim]")
+        trainer.warm_up()
+
+    console.print(
+        f"\n[bold]{r.name}[/bold]\n"
+        f"{rounds} questions. Answers: a number, or h/s/d/p/r for a play. "
+        f"Blank line or Ctrl-C to stop early.\n"
+    )
+
+    asked = right = 0
+    try:
+        for i in range(1, rounds + 1):
+            q = trainer.next_question()
+            console.print(f"[bold]{i}/{rounds}[/bold]  {q.prompt}")
+            start = time.monotonic()
+            try:
+                response = typer.prompt("  answer", default="", show_default=False)
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not response.strip():
+                break
+            elapsed = time.monotonic() - start
+            ok = trainer.answer(q, response, elapsed)
+            asked += 1
+            right += int(ok)
+            if ok:
+                console.print(f"  [green]correct[/green]  ({elapsed:.1f}s)\n")
+            else:
+                console.print(
+                    f"  [red]no -- {q.answer}[/red]  "
+                    f"[dim]{q.explain}[/dim]  ({elapsed:.1f}s)\n"
+                )
+    except KeyboardInterrupt:
+        console.print()
+
+    progress.save()
+    if asked:
+        console.print(
+            f"[bold]{right}/{asked}[/bold] correct this session "
+            f"({right / asked:.0%}). Progress saved.\n"
+        )
+    _show_progress(progress, brief=True)
+
+
+def _show_progress(progress: Progress, *, brief: bool = False) -> None:
+    s = progress.summary()
+    if not s["answered"]:
+        console.print("[dim]No history yet -- run a drill first.[/dim]")
+        return
+    console.print(
+        f"All time: [bold]{s['correct']}/{s['answered']}[/bold] "
+        f"({s['accuracy']:.0%}), {s['mean_seconds']:.1f}s per answer, "
+        f"{s['items_tracked']} items tracked."
+    )
+    weak = progress.weakest(8 if not brief else 5)
+    if not weak:
+        return
+    t = Table(title="Worst items -- these come up most often")
+    for c in ("item", "accuracy", "mean time", "seen"):
+        t.add_column(c, justify="right" if c != "item" else "left")
+    for key, st in weak:
+        t.add_row(key, f"{st.accuracy:.0%}", f"{st.mean_seconds:.1f}s",
+                  str(st.seen))
     console.print(t)
     console.print()
 

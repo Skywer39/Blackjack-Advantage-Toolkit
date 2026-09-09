@@ -68,6 +68,7 @@ positive counts is what makes a high minimum survivable.
 | `bj chart` | Basic strategy computed for these exact rules |
 | `bj deviations` | Index numbers, ranked by what each is actually worth |
 | `bj play` | The correct play for one hand at one count |
+| `bj drill` | Practise counting, strategy and deviations for your rules |
 | `bj rules` | Where does this game's house edge come from? |
 | `bj verify` | Check the model's constants against an exact enumeration |
 | `bj sensitivity` | Which uncertain inputs actually move my conclusions? |
@@ -127,6 +128,30 @@ small fraction of the quoted 5%.
 The most useful thing the simulator turned up: **resizing your unit as the
 bankroll moves cuts risk of ruin from 4.23% to 0.35%** — for nothing at the
 median, and a better bad tail. Full results and caveats in `docs/validation.md`.
+
+## Practising the right chart
+
+```bash
+bj drill --preset ambassador --kinds count,truecount,strategy,deviation -n 20
+```
+
+Five drills: running count over a stream of cards, true-count conversion,
+basic strategy, index plays, and bet sizing off your own ramp.
+
+Two things make it more than flashcards. The strategy and deviation questions
+are **generated from the analyzer**, so you practise the chart for the game you
+actually sit at — including the ENHC corrections no printed chart carries.
+Drilling a Vegas chart for a Prague table would teach you the wrong answer four
+times over.
+
+And repetition is weighted toward what you get wrong. Misses come back most,
+then slow answers — knowing it eventually is not the same as knowing it with a
+dealer waiting. Progress persists between sessions; `bj drill --stats` shows
+your weakest items.
+
+The scenarios are constrained to ones you can actually meet: never a shoe state
+past the cut card, and the running count is sampled from its real random-walk
+spread, so you will not be asked for the true count at −35 with a full shoe.
 
 ## The constants are checked against an exact enumeration
 
@@ -218,13 +243,29 @@ one standard deviation. Short-term results tell you close to nothing.
 
 ## Status
 
-Phase 1 complete: rules engine, true-count simulation, ramps, risk, viability,
-CLI, 113 tests.
+Everything in the original spec is built except the Phase 3 stretch goals
+(web UI, session logging, wallet-card export):
 
-Not built yet: Monte Carlo validation of the analytic risk of ruin (Phase 1.5),
-and the strategy/deviation engine and trainer (Phase 2). Phase 2 should compute
-deviation indices for the configured rule set rather than adjusting a published
-list — see open question 3.
+| phase | what | state |
+|---|---|---|
+| 1 | rules engine, true-count simulation, ramps, risk, viability | done |
+| 1.5 | Monte Carlo validation of the analytic risk model | done |
+| 2 | exact analyzer, computed charts, deviation indices, trainer | done |
+| — | exact-enumeration verification of the EV model itself | done |
+
+287 tests, ruff clean. The default suite runs in about 90 seconds; the
+long-running enumerations and Monte Carlo runs are opt-in:
+
+```bash
+pytest                      # 259 fast tests
+pytest -m slow              # 28 slow ones, about 12 minutes
+ruff check src tests
+```
+
+The spec's full-hand simulator is deliberately **not** built — it cannot resolve
+an edge this small at any reachable sample size. `bj verify` enumerates the game
+exactly instead; see the verification section above.
+
 
 Card counting is legal. Casinos are private property and may refuse service.
 This is an educational modelling tool, not financial advice.

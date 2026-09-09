@@ -265,3 +265,63 @@ def test_presets_json_lists_every_preset():
     keys = {r["key"] for r in rows}
     assert {"ambassador", "vegas-strip", "six-five"} <= keys
     assert all(r["base_edge"] < 0 for r in rows)
+
+
+# --- Phase 2: the trainer -------------------------------------------------
+
+def test_drill_runs_a_session_and_reports(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    result = runner.invoke(
+        app, ["drill", "-p", "ambassador", "--kinds", "count,truecount",
+              "-n", "3", "--seed", "7"],
+        input="0\n0\n0\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "correct this session" in result.output
+
+
+def test_drill_saves_progress_between_sessions(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    args = ["drill", "-p", "ambassador", "--kinds", "count", "-n", "2",
+            "--seed", "3"]
+    runner.invoke(app, args, input="0\n0\n")
+    assert (tmp_path / "trainer_progress.json").exists()
+    out = runner.invoke(app, ["drill", "--stats"]).output
+    assert "All time" in out
+
+
+def test_drill_stops_on_a_blank_answer(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    result = runner.invoke(
+        app, ["drill", "-p", "ambassador", "--kinds", "count", "-n", "20",
+              "--seed", "1"],
+        input="0\n\n",
+    )
+    assert result.exit_code == 0
+    assert "1/20" in result.output and "3/20" not in result.output
+
+
+def test_drill_reset_erases_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    runner.invoke(app, ["drill", "-p", "ambassador", "--kinds", "count",
+                        "-n", "1", "--seed", "1"], input="0\n")
+    assert (tmp_path / "trainer_progress.json").exists()
+    out = runner.invoke(app, ["drill", "--reset", "--stats"]).output
+    assert "erased" in out.lower()
+    assert not (tmp_path / "trainer_progress.json").exists()
+
+
+def test_drill_rejects_an_unknown_kind(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    result = runner.invoke(app, ["drill", "--kinds", "telepathy", "-n", "1"])
+    assert result.exit_code != 0
+
+
+def test_drill_json_reports_progress(tmp_path, monkeypatch):
+    monkeypatch.setenv("BJTOOLKIT_CACHE_DIR", str(tmp_path))
+    runner.invoke(app, ["drill", "-p", "ambassador", "--kinds", "count",
+                        "-n", "2", "--seed", "5"], input="0\n0\n")
+    d = run_json("drill")
+    assert d["summary"]["answered"] == 2
+    assert 0.0 <= d["summary"]["accuracy"] <= 1.0
+    assert isinstance(d["weakest"], list)
