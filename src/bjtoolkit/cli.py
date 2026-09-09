@@ -30,6 +30,12 @@ from .risk import (
 )
 from .rules import PRESETS, RuleSet, base_edge, base_edge_range, edge_components, get_preset
 from .simulate import ruin_convergence, simulate
+from .analyzer import Action, clear_caches
+from .cards import RANK_NAMES
+from .strategy import (
+    UPCARDS, all_deviations, basic_strategy, decide, insurance_index,
+    rank_deviations,
+)
 from .viability import assess, penetration_sweep
 
 app = typer.Typer(
@@ -580,6 +586,174 @@ def validate(
         "only once the horizon is long compared with the time the edge needs to "
         "carry the bankroll clear.[/dim]\n"
     )
+
+
+_SYMBOL = {
+    Action.HIT: "H", Action.STAND: "S", Action.DOUBLE: "D",
+    Action.SPLIT: "P", Action.SURRENDER: "R",
+}
+_COLOUR = {
+    Action.HIT: "white", Action.STAND: "yellow", Action.DOUBLE: "green",
+    Action.SPLIT: "cyan", Action.SURRENDER: "magenta",
+}
+
+
+@app.command()
+def chart(
+    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
+    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
+    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
+    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    tc: float = typer.Option(0.0, "--tc", help="True count to compute the chart at."),
+    mark_close: bool = typer.Option(
+        True, "--mark-close/--no-mark-close",
+        help="Flag cells decided by less than 0.01 in EV.",
+    ),
+    json: bool = P_JSON,
+) -> None:
+    """Compute basic strategy for these exact rules, cell by cell."""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    cells = basic_strategy(r, tc)
+    if json:
+        typer.echo(_dump([
+            {"category": c.category, "label": c.label,
+             "upcard": RANK_NAMES[c.upcard], "action": c.action.value,
+             "ev": c.ev, "margin": c.margin, "close": c.close}
+            for c in cells
+        ]))
+        return
+
+    by: dict[tuple[str, str], dict[int, object]] = {}
+    for c in cells:
+        by.setdefault((c.category, c.label), {})[c.upcard] = c
+
+    console.print(f"\n[bold]{r.name}[/bold]  (true count {tc:+g})")
+    for category, title in (("hard", "Hard totals"), ("soft", "Soft totals"),
+                            ("pair", "Pairs")):
+        t = Table(title=title)
+        t.add_column("")
+        for u in UPCARDS:
+            t.add_column(RANK_NAMES[u], justify="center")
+        for (cat, label), row in by.items():
+            if cat != category:
+                continue
+            cellz = []
+            for u in UPCARDS:
+                c = row[u]
+                sym = _SYMBOL[c.action]
+                if mark_close and c.close:
+                    sym += "*"
+                cellz.append(f"[{_COLOUR[c.action]}]{sym}[/]")
+            t.add_row(label, *cellz)
+        console.print(t)
+    console.print(
+        "H hit  S stand  D double  P split  R surrender"
+        + ("   * decided by less than 0.01 in EV" if mark_close else "")
+    )
+    console.print(
+        f"Insurance becomes profitable at true count "
+        f"[bold]{insurance_index(r):+.2f}[/bold]\n"
+    )
+
+
+@app.command()
+def deviations(
+    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
+    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
+    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
+    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    top: int = typer.Option(18, "--top", help="How many to show. 0 for all."),
+    lo: int = typer.Option(-6, "--min-tc"),
+    hi: int = typer.Option(8, "--max-tc"),
+    json: bool = P_JSON,
+) -> None:
+    """Deviation indices for these rules, ranked by what each is actually worth."""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+    dist = load_or_simulate(r)
+    devs = all_deviations(r, tc_range=(lo, hi))
+    ranked = rank_deviations(
+        r, {t: dist.p(t) for t in dist.counts()}, deviations=devs
+    )
+    shown = ranked if top <= 0 else ranked[:top]
+    if json:
+        typer.echo(_dump([
+            {"category": x.deviation.category, "label": x.deviation.label,
+             "upcard": RANK_NAMES[x.deviation.upcard],
+             "basic": x.deviation.basic.value,
+             "switch_to": x.deviation.switch_to.value,
+             "index": x.deviation.index, "direction": x.deviation.direction,
+             "value_bp_per_round": x.value_per_hand * 10000,
+             "frequency": x.frequency}
+            for x in shown
+        ]))
+        return
+
+    console.print(f"\n[bold]{r.name}[/bold]")
+    console.print(
+        f"Insurance at true count [bold]{insurance_index(r):+.2f}[/bold] "
+        f"-- worth more than every play deviation below combined.\n"
+    )
+    t = Table(title=f"Top {len(shown)} of {len(ranked)} deviations, by value at "
+                    f"{r.penetration_fraction:.0%} penetration")
+    for c in ("#", "hand", "vs", "basic", "becomes", "index", "gain"):
+        t.add_column(c, justify="right" if c in ("#", "index", "gain") else "left")
+    for i, x in enumerate(shown, 1):
+        d = x.deviation
+        t.add_row(str(i), d.label, RANK_NAMES[d.upcard], d.basic.value,
+                  d.switch_to.value, f"{d.index:+d}{d.direction}",
+                  f"{x.value_per_hand * 10000:.2f} bp")
+    console.print(t)
+    console.print(
+        "\n[dim]Gain is basis points of a bet per round played, at your "
+        "penetration. Learn them in this order; the tail is worth nothing.[/dim]\n"
+    )
+
+
+@app.command()
+def play(
+    preset: str = P_PRESET, config: Optional[Path] = P_CONFIG,
+    decks: Optional[int] = P_DECKS, pen: Optional[float] = P_PEN,
+    table_min: Optional[float] = P_MIN, table_max: Optional[float] = P_MAX,
+    h17: Optional[bool] = P_H17, players: Optional[int] = P_PLAYERS,
+    hand: str = typer.Argument(..., help="Your cards, e.g. 'A,7' or 'T,6' or '5,6'."),
+    upcard: str = typer.Argument(..., help="Dealer upcard, e.g. 'T' or '9'."),
+    tc: float = typer.Option(0.0, "--tc", help="Current true count."),
+    json: bool = P_JSON,
+) -> None:
+    """What is the correct play for one hand, right now?"""
+    r = _load_rules(preset, config, decks, pen, table_min, table_max, h17, players)
+
+    def parse(token: str) -> int:
+        token = token.strip().upper()
+        if token in ("10", "J", "Q", "K"):
+            token = "T"
+        if token not in RANK_NAMES:
+            raise typer.BadParameter(f"unknown card {token!r}")
+        return RANK_NAMES.index(token)
+
+    cards = tuple(parse(c) for c in hand.split(","))
+    up = parse(upcard)
+    if len(cards) < 2:
+        raise typer.BadParameter("give at least two cards, e.g. 'T,6'")
+
+    from .analyzer import action_evs
+    from .cards import deck_for_true_count, remove_many
+    deck = remove_many(deck_for_true_count(tc, r.decks), *cards, up)
+    evs = action_evs(cards, up, deck, r,
+                     allow_split=(len(cards) == 2 and cards[0] == cards[1]))
+    action = decide(cards, up, tc, r)
+    if json:
+        typer.echo(_dump({"action": action.value,
+                          "evs": {a.value: v for a, v in evs.items()}}))
+        return
+    console.print(f"\n[bold]{hand.upper()} vs {RANK_NAMES[up]}[/bold] at true "
+                  f"count {tc:+g}  ->  [bold green]{action.value.upper()}[/bold green]")
+    t = Table()
+    t.add_column("action"); t.add_column("EV", justify="right")
+    for a, v in sorted(evs.items(), key=lambda kv: -kv[1]):
+        t.add_row(a.value, f"{v:+.4f}")
+    console.print(t)
+    console.print()
 
 
 @app.command()

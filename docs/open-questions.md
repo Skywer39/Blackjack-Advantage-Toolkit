@@ -28,33 +28,14 @@ The spread between the top and bottom row is larger than the entire ENHC
 penalty. Ask the pit how a surrender against a ten is settled when the dealer
 draws a blackjack.
 
-## 3. The vs-Ace doubling indices in the chart are probably wrong for full ENHC
+## 3. RESOLVED: the vs-Ace doubling indices were wrong
 
-The accompanying chart carries `11 vs A → double at TC +1` and
-`10 vs A → double at TC +4`. Those are the standard Illustrious 18 values for a
-**peek** game, and they look wrong here.
+Settled by the Phase 2 analyzer. Doubling 11 or 10 into an ace is never correct
+in a full-ENHC game at any true count, so the chart's `+1` and `+4` indices
+should not be used. The engine also found a fifth basic-strategy correction the
+chart is missing -- `11 vs 10 -> hit` -- and confirmed the four it does list.
 
-The arithmetic: against an Ace upcard the dealer completes a blackjack about
-16/51 ≈ 31% of the time. Under full ENHC the doubled portion of the bet is lost
-along with the original, so doubling costs an extra ~0.31 units in that branch.
-Doubling 11 vs A gains on the order of 0.05-0.10 units at TC +1 in a peek game.
-A 0.31-unit penalty swamps that.
-
-Worse, the penalty *grows* with the count: a higher true count means more tens,
-so a higher chance the dealer has the blackjack. There is likely no true count
-at which doubling into an Ace is correct in a full-ENHC game.
-
-The same argument applies to `10 vs A → double at TC +4`, less severely to the
-tens column (an Ace under a ten is only 4/51 ≈ 7.8%), and not at all to anything
-against a 2 through 9.
-
-**Status: unresolved.** The Phase 2 strategy engine should compute these indices
-for the actual rule set rather than adjusting a published peek-game list. Until
-then, do not trust the vs-Ace deviation cells.
-
-The chart's basic-strategy ENHC corrections, by contrast, check out:
-`11 vs A → hit`, `8,8 vs A → hit`, `A,A vs A → hit`, and `8,8 vs 10 → surrender`
-(split runs about -0.56 after the ENHC penalty against surrender's fixed -0.50).
+Full working in `docs/chart-review.md`.
 
 ## 4. The EV(tc) model is linear, and Phase 1.5 cannot check it
 

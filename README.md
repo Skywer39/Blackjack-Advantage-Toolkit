@@ -65,6 +65,9 @@ positive counts is what makes a high minimum survivable.
 | `bj risk` | Win rate, SD, N0, risk of ruin, probability of profit |
 | `bj freq` | What does the true-count distribution look like at this penetration? |
 | `bj pen-sweep` | What is the dealer's cut card worth to me? |
+| `bj chart` | Basic strategy computed for these exact rules |
+| `bj deviations` | Index numbers, ranked by what each is actually worth |
+| `bj play` | The correct play for one hand at one count |
 | `bj rules` | Where does this game's house edge come from? |
 | `bj sensitivity` | Which uncertain inputs actually move my conclusions? |
 | `bj presets` | What games are built in? |
@@ -123,6 +126,29 @@ small fraction of the quoted 5%.
 The most useful thing the simulator turned up: **resizing your unit as the
 bankroll moves cuts risk of ruin from 4.25% to 0.47%**, at a cost of about 4% of
 the median outcome. Full results and caveats in `docs/validation.md`.
+
+## Strategy is computed, not transcribed
+
+`bj chart` derives basic strategy from an exact EV engine rather than copying a
+published chart. Run against a plain US game it reproduces the printed 6-deck
+S17 chart **exactly, all 340 cells** — which is what makes it trustworthy on
+games no one has printed a chart for.
+
+That turned up three things about the ENHC chart this project started from:
+
+* Its four ENHC corrections are all **correct**.
+* It is **missing a fifth**: `11 vs 10 → hit`. A ten upcard makes a natural 7.7%
+  of the time, and under all-bets-lost that is enough to flip the cell. Doubling
+  only becomes right again at true count +4.
+* Its **vs-Ace doubling indices are wrong**. `11 vs A → double at +1` and
+  `10 vs A → double at +4` are peek-game numbers. Under full ENHC doubling into
+  an ace is never correct at any count — a higher count means more tens, so a
+  *higher* chance the dealer holds the natural that takes your second unit. The
+  engine independently reproduces the +1 index when the dealer does peek, which
+  is how you can tell it is right rather than merely different.
+
+`bj deviations` ranks index numbers by what each is worth at your penetration,
+so you learn the ones that pay. Working in `docs/chart-review.md`.
 
 ## What this gets right that simple tools get wrong
 

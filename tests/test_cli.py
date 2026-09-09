@@ -169,6 +169,7 @@ def test_sim_rejects_an_unknown_outcome_model():
     assert result.exit_code != 0
 
 
+@pytest.mark.slow
 def test_validate_shows_ruin_rising_with_the_horizon():
     rows = run_json("validate", "-p", "ambassador", "-b", "94158", "--spread", "8",
                     "--wong-out-below", "1", "--paths", "600")
@@ -176,3 +177,72 @@ def test_validate_shows_ruin_rising_with_the_horizon():
     assert rows[0]["n_hands"] < rows[-1]["n_hands"]
     # The analytic figure is a property of the ramp, not of the horizon.
     assert len({round(r["analytic_ror"], 9) for r in rows}) == 1
+
+
+# --- Phase 2: strategy commands -------------------------------------------
+
+def test_chart_json_covers_every_cell():
+    cells = run_json("chart", "-p", "vegas-strip")
+    assert len(cells) == 340
+    assert {c["category"] for c in cells} == {"hard", "soft", "pair"}
+    assert all(c["action"] in
+               {"hit", "stand", "double", "split", "surrender"} for c in cells)
+
+
+def test_chart_reflects_the_rules_it_is_given():
+    s17 = {(c["category"], c["label"], c["upcard"]): c["action"]
+           for c in run_json("chart", "-p", "vegas-strip")}
+    h17 = {(c["category"], c["label"], c["upcard"]): c["action"]
+           for c in run_json("chart", "-p", "vegas-h17")}
+    assert s17[("hard", "11", "A")] == "hit"
+    assert h17[("hard", "11", "A")] == "double"
+
+
+def test_chart_enhc_corrections_appear():
+    chart = {(c["category"], c["label"], c["upcard"]): c["action"]
+             for c in run_json("chart", "-p", "ambassador")}
+    assert chart[("hard", "11", "A")] == "hit"
+    assert chart[("hard", "11", "T")] == "hit"
+    assert chart[("pair", "8,8", "T")] == "surrender"
+
+
+def test_chart_at_a_high_count_differs_from_neutral():
+    a = {(c["label"], c["upcard"]): c["action"]
+         for c in run_json("chart", "-p", "vegas-strip", "--tc", "0")}
+    b = {(c["label"], c["upcard"]): c["action"]
+         for c in run_json("chart", "-p", "vegas-strip", "--tc", "5")}
+    assert a != b
+
+
+def test_play_returns_an_action_and_its_evs():
+    d = run_json("play", "T,6", "9", "-p", "vegas-strip")
+    assert d["action"] in {"hit", "stand", "surrender"}
+    assert d["evs"][d["action"]] == max(d["evs"].values())
+
+
+def test_play_accepts_face_cards_and_tens():
+    for token in ("T", "10", "K", "q"):
+        d = run_json("play", f"{token},6", "9", "-p", "vegas-strip")
+        assert d["action"]
+
+
+def test_play_rejects_nonsense():
+    for args in (["play", "Z,6", "9"], ["play", "T", "9"]):
+        assert runner.invoke(app, args).exit_code != 0
+
+
+@pytest.mark.slow
+def test_deviations_are_ranked_by_value():
+    rows = run_json("deviations", "-p", "ambassador", "--top", "10",
+                    "--min-tc", "-3", "--max-tc", "4")
+    assert len(rows) <= 10
+    values = [r["value_bp_per_round"] for r in rows]
+    assert values == sorted(values, reverse=True)
+    assert all(r["direction"] in ("+", "-") for r in rows)
+
+
+def test_deviations_command_runs_over_a_narrow_count_range():
+    """Cheap smoke test; the full ranking is checked in the slow suite."""
+    rows = run_json("deviations", "-p", "ambassador", "--top", "3",
+                    "--min-tc", "-1", "--max-tc", "1")
+    assert all("index" in r and "value_bp_per_round" in r for r in rows)
