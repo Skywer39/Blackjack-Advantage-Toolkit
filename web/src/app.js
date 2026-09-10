@@ -10,7 +10,15 @@ import {
   DoubleRule, HoleCard, PRESETS, Surrender, baseEdge, baseEdgeRange,
   edgeComponents, makeRules, maxTableSpread, penetrationFraction,
 } from "./engine/rules.js";
-import { basicStrategy, insuranceIndex } from "./engine/strategy.js";
+import {
+  UPCARDS, basicStrategy, cardsForHard, cardsForPair, cardsForSoft, chartLookup,
+  findDeviation, insuranceIndex, rankDeviations,
+} from "./engine/strategy.js";
+import {
+  KINDS, KIND_LABELS, Progress, betQuestion, checkAnswer, clearProgress,
+  countQuestion, deviationQuestion, loadProgress, pickKind, saveProgress,
+  strategyQuestion, trueCountQuestion,
+} from "./engine/trainer.js";
 import { counts, probAtOrAbove, simulateTcDistribution } from "./engine/frequency.js";
 import {
   bankrollForRor, breakevenTc, evAtTc, evaluate, kellyForRor, kellyRamp,
@@ -36,6 +44,7 @@ const state = {
   roundsPerHour: 70,
   targetRor: 0.05,
   tab: "betting",
+  drill: null,
   dist: null,
   chart: null,
   chartKey: null,
@@ -252,13 +261,14 @@ function render() {
   canvas.replaceChildren();
   canvas.append(tabs());
   if (state.tab === "betting") renderBetting(canvas);
-  else renderChart(canvas);
+  else if (state.tab === "chart") renderChart(canvas);
+  else renderDrill(canvas);
 }
 
 function tabs() {
   const wrap = el("section", "panel");
   const bar = el("div", "tabs");
-  for (const [key, label] of [["betting", "Bankroll & ramp"], ["chart", "Strategy chart"]]) {
+  for (const [key, label] of [["betting", "Bankroll & ramp"], ["chart", "Strategy chart"], ["drill", "Drill"]]) {
     const b = el("button", null, label);
     b.type = "button";
     b.setAttribute("aria-selected", String(state.tab === key));
@@ -576,6 +586,12 @@ function warningsPanel(warnings) {
 // --- strategy chart -------------------------------------------------------
 
 const SYM = { hit: "H", stand: "S", double: "D", split: "P", surrender: "R" };
+// Explicit, not built by string concatenation: a token name assembled at
+// runtime cannot be checked, and one typo renders a swatch with no colour.
+const ACTION_SWATCH = {
+  hit: "var(--act-hit)", stand: "var(--act-stand)", double: "var(--act-double)",
+  split: "var(--act-split)", surrender: "var(--act-sur)",
+};
 
 function renderChart(canvas) {
   const r = state.rules;
@@ -676,7 +692,7 @@ function drawChart(body, cells, r) {
     ["split", "Split"], ["surrender", "Surrender"]]) {
     const s = el("span");
     const i = el("i");
-    i.style.background = `var(--act-${k === "surrender" ? "sur" : k})`;
+    i.style.background = ACTION_SWATCH[k];
     s.append(i, document.createTextNode(label));
     legend.append(s);
   }
@@ -716,3 +732,607 @@ initTheme();
 initRail();
 buildRail();
 render();
+
+// ==========================================================================
+// Drill
+// ==========================================================================
+
+const DRILL_STORE = "rr-drill-settings-v1";
+const ACTION_KEYS = [
+  ["hit", "Hit", "H"], ["stand", "Stand", "S"], ["double", "Double", "D"],
+  ["split", "Split", "P"], ["surrender", "Surrender", "R"],
+];
+
+function loadDrillSettings() {
+  const base = { kinds: ["count", "truecount", "strategy"], speed: 2, cards: 12, rounds: 20 };
+  try {
+    const raw = localStorage.getItem(DRILL_STORE);
+    if (!raw) return base;
+    const saved = JSON.parse(raw);
+    const kinds = Array.isArray(saved.kinds)
+      ? saved.kinds.filter((k) => KINDS.includes(k)) : base.kinds;
+    return { ...base, ...saved, kinds: kinds.length ? kinds : base.kinds };
+  } catch { return base; }
+}
+
+function saveDrillSettings(s) {
+  try {
+    localStorage.setItem(DRILL_STORE, JSON.stringify({
+      kinds: s.kinds, speed: s.speed, cards: s.cards, rounds: s.rounds,
+    }));
+  } catch { /* private window; settings just will not persist */ }
+}
+
+function drillState() {
+  if (!state.drill) {
+    const saved = loadDrillSettings();
+    state.drill = {
+      phase: "setup", ...saved,
+      progress: loadProgress(),
+      index: 0, correct: 0, question: null, input: "",
+      askedAt: 0, lastMs: 0, wasRight: null,
+      chart: null, chartKey: null,
+      devs: null, devsKey: null, devsProgress: 0,
+      timer: null,
+    };
+  }
+  return state.drill;
+}
+
+const rulesKey = (r) => JSON.stringify([
+  r.decks, r.dealerHitsSoft17, r.doubleRule, r.doubleAfterSplit, r.resplitAces,
+  r.maxSplitHands, r.surrender, r.holeCard, r.blackjackPayout,
+]);
+
+function stopDrillTimers() {
+  const d = state.drill;
+  if (d && d.timer) { clearTimeout(d.timer); d.timer = null; }
+}
+
+function renderDrill(canvas) {
+  const d = drillState();
+  const panel = el("section", "panel");
+  const head = el("header");
+  head.append(el("h2", null, "Drill"));
+  head.append(el("span", "note", "questions generated from the chart for these exact rules"));
+  panel.append(head);
+  const body = el("div", "pad");
+  panel.append(body);
+  canvas.append(panel);
+
+  if (d.phase === "setup") drawSetup(body, d);
+  else if (d.phase === "preparing") drawPreparing(body, d);
+  else if (d.phase === "done") drawDone(body, d);
+  else drawStage(body, d);
+}
+
+function drawSetup(body, d) {
+  const wrap = el("div", "drill-setup");
+
+  const kindsBlock = el("div");
+  kindsBlock.append(labelled("What to practise"));
+  const chips = el("div", "chips");
+  for (const kind of KINDS) {
+    const b = el("button", null, KIND_LABELS[kind]);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(d.kinds.includes(kind)));
+    if (kind === "bet" && state.bankroll <= 0) b.disabled = true;
+    b.addEventListener("click", () => {
+      d.kinds = d.kinds.includes(kind)
+        ? d.kinds.filter((k) => k !== kind)
+        : [...d.kinds, kind];
+      if (!d.kinds.length) d.kinds = [kind];
+      saveDrillSettings(d);
+      render();
+    });
+    chips.append(b);
+  }
+  kindsBlock.append(chips);
+  if (d.kinds.includes("deviation")) {
+    const n = el("p", null,
+      "Index plays need a one-off scan of every cell for these rules — about "
+      + "half a minute the first time, then remembered.");
+    n.style.cssText = "font-size:12px;color:var(--ink-faint);margin:7px 0 0;max-width:52ch";
+    kindsBlock.append(n);
+  }
+  wrap.append(kindsBlock);
+
+  if (d.kinds.includes("count")) {
+    const speed = el("div");
+    speed.append(labelled("Card speed"));
+    const chips2 = el("div", "chips");
+    for (const [v, label] of [[1, "1/sec"], [1.5, "1.5/sec"], [2, "2/sec"], [3, "3/sec"], [4, "4/sec"]]) {
+      const b = el("button", null, label);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(d.speed === v));
+      b.addEventListener("click", () => { d.speed = v; saveDrillSettings(d); render(); });
+      chips2.append(b);
+    }
+    speed.append(chips2);
+    const cards = el("div");
+    cards.style.marginTop = "12px";
+    cards.append(labelled("Cards per round"));
+    const chips3 = el("div", "chips");
+    for (const v of [6, 12, 20, 30, 52]) {
+      const b = el("button", null, String(v));
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(d.cards === v));
+      b.addEventListener("click", () => { d.cards = v; saveDrillSettings(d); render(); });
+      chips3.append(b);
+    }
+    cards.append(chips3);
+    speed.append(cards);
+    wrap.append(speed);
+  }
+
+  const rounds = el("div");
+  rounds.append(labelled("Questions"));
+  const chips4 = el("div", "chips");
+  for (const v of [10, 20, 40, 100]) {
+    const b = el("button", null, String(v));
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(d.rounds === v));
+    b.addEventListener("click", () => { d.rounds = v; saveDrillSettings(d); render(); });
+    chips4.append(b);
+  }
+  rounds.append(chips4);
+  wrap.append(rounds);
+
+  const row = el("div", "btn-row");
+  const go = el("button", "btn", "Start drilling");
+  go.type = "button";
+  go.addEventListener("click", () => startDrill(d));
+  row.append(go);
+  const sum = d.progress.summary();
+  if (sum.answered) {
+    const reset = el("button", "btn ghost", "Erase history");
+    reset.type = "button";
+    reset.addEventListener("click", () => {
+      clearProgress();
+      d.progress = new Progress();
+      render();
+    });
+    row.append(reset);
+  }
+  wrap.append(row);
+
+  if (sum.answered) wrap.append(progressBlock(d));
+  else {
+    const p = el("p", null,
+      "Nothing drilled yet. Misses come back most often, then slow answers — "
+      + "so the questions follow your weak spots rather than a fixed order.");
+    p.style.cssText = "font-size:12.5px;color:var(--ink-faint);max-width:56ch;margin:0";
+    wrap.append(p);
+  }
+  body.append(wrap);
+}
+
+function labelled(text) {
+  const h = el("h3", null, text);
+  h.style.cssText = "font-size:11px;letter-spacing:.09em;text-transform:uppercase;"
+    + "color:var(--ink-faint);font-weight:600;margin:0 0 8px";
+  return h;
+}
+
+function progressBlock(d) {
+  const wrap = el("div");
+  const sum = d.progress.summary();
+  wrap.append(labelled("Your history"));
+  const line = el("div", "scoreline");
+  line.innerHTML = `<span><b>${Math.round(sum.accuracy * 100)}%</b> correct</span>
+    <span><b>${sum.answered}</b> answered</span>
+    <span><b>${sum.meanSeconds.toFixed(1)}s</b> average</span>`;
+  wrap.append(line);
+
+  const byKind = d.progress.byKind();
+  const grid = el("div", "kind-stats");
+  grid.style.marginTop = "11px";
+  for (const kind of KINDS) {
+    const s = byKind[kind];
+    if (!s || !s.seen) continue;
+    const t = el("div", "kind-stat");
+    t.append(el("div", "k", KIND_LABELS[kind]));
+    t.append(el("div", "v", Math.round((s.correct / s.seen) * 100) + "%"));
+    t.append(el("div", "n", `${s.seen} asked · ${(s.totalMs / s.seen / 1000).toFixed(1)}s each`));
+    grid.append(t);
+  }
+  if (grid.children.length) wrap.append(grid);
+
+  const weak = d.progress.weakest(6);
+  if (weak.length) {
+    const h = labelled("Coming up most often");
+    h.style.marginTop = "16px";
+    wrap.append(h);
+    const ul = el("ul", "warn-list");
+    for (const [key, s] of weak) {
+      const li = el("li", null,
+        `${prettyItem(key)} — ${Math.round((s.correct / s.seen) * 100)}% over ${s.seen}, `
+        + `${(s.totalMs / s.seen / 1000).toFixed(1)}s each`);
+      ul.append(li);
+    }
+    wrap.append(ul);
+  }
+  return wrap;
+}
+
+function prettyItem(key) {
+  const [kind, rest] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  if (kind === "count") return `Running count over ${rest} cards`;
+  if (kind === "truecount") return `True count with ${rest} decks left`;
+  if (kind === "bet") return `Bet at true count ${signed(Number(rest))}`;
+  const [category, label, up] = rest.split("|");
+  const hand = category === "hard" ? `Hard ${label}` : label;
+  return `${hand} vs ${up}${kind === "deviation" ? " (index)" : ""}`;
+}
+
+// --- material -------------------------------------------------------------
+
+async function startDrill(d) {
+  const r = state.rules;
+  const key = rulesKey(r);
+  const needsChart = d.kinds.includes("strategy") || d.kinds.includes("deviation");
+  const needsDevs = d.kinds.includes("deviation");
+
+  if ((needsChart && d.chartKey !== key) || (needsDevs && d.devsKey !== key)) {
+    d.phase = "preparing";
+    d.devsProgress = 0;
+    render();
+    await new Promise((res) => setTimeout(res, 30));
+
+    if (needsChart && d.chartKey !== key) {
+      d.chart = chartLookup(basicStrategy(r));
+      d.chartKey = key;
+    }
+    if (needsDevs && d.devsKey !== key) {
+      const cached = readCachedDevs(key);
+      d.devs = cached || await scanDeviations(r, (frac) => {
+        d.devsProgress = frac;
+        const bar = document.getElementById("prepBar");
+        if (bar) bar.style.width = `${Math.round(frac * 100)}%`;
+      });
+      if (!cached) writeCachedDevs(key, d.devs);
+      d.devsKey = key;
+    }
+  }
+
+  d.index = 0;
+  d.correct = 0;
+  d.times = [];
+  nextQuestion(d);
+}
+
+function readCachedDevs(key) {
+  try {
+    const raw = localStorage.getItem("rr-devs-" + hash(key));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function writeCachedDevs(key, devs) {
+  try { localStorage.setItem("rr-devs-" + hash(key), JSON.stringify(devs)); }
+  catch { /* quota or private window; it will just be recomputed next time */ }
+}
+
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+// Scans every cell for an index, one row at a time so the progress bar
+// actually paints. Ranked by value at this penetration, so the drill asks about
+// the indices worth money rather than the seventy that exist.
+async function scanDeviations(r, onProgress) {
+  const dist = ensureDist();
+  const rows = [
+    ...hardLabels().map((l) => ["hard", cardsForHard(Number(l)), l]),
+    ...softLabels().map((l) => ["soft", cardsForSoft(11 + Number(l.split(",")[1])), l]),
+    ...pairLabels().map((l) => ["pair", cardsForPair(pairRank(l)), l]),
+  ];
+  const found = [];
+  for (let i = 0; i < rows.length; i++) {
+    await new Promise((res) => setTimeout(res, 0));
+    const [category, cards, label] = rows[i];
+    for (const up of UPCARDS) {
+      const d = findDeviation(category, cards, label, up, r, [-6, 8]);
+      if (d) found.push(d);
+    }
+    // Leave the last slice of the bar for ranking, which is not free either.
+    onProgress(((i + 1) / rows.length) * 0.9);
+  }
+
+  await new Promise((res) => setTimeout(res, 0));
+  const probs = {};
+  for (const tc of counts(dist)) probs[tc] = dist.probs[tc];
+  const ranked = rankDeviations(r, probs, found);
+  onProgress(1);
+  return ranked.filter((x) => x.value > 0).slice(0, 20).map((x) => x.deviation);
+}
+
+const pairRank = (label) => {
+  const left = label.split(",")[0];
+  return left === "A" ? 9 : left === "T" ? 8 : Number(left) - 2;
+};
+
+const hardLabels = () => Array.from({ length: 16 }, (_, i) => String(i + 5));
+const softLabels = () => Array.from({ length: 8 }, (_, i) => `A,${i + 2}`);
+const pairLabels = () =>
+  ["2,2", "3,3", "4,4", "5,5", "6,6", "7,7", "8,8", "9,9", "T,T", "A,A"];
+
+function drawPreparing(body, d) {
+  const stage = el("div", "stage");
+  stage.append(el("div", "prompt", "Working out the index plays"));
+  stage.append(el("div", "sub-prompt",
+    "Every cell, at every count, for these rules. Done once, then remembered."));
+  const bar = el("div", "bar");
+  const fill = el("i");
+  fill.id = "prepBar";
+  fill.style.width = `${Math.round(d.devsProgress * 100)}%`;
+  bar.append(fill);
+  bar.style.maxWidth = "260px";
+  bar.style.width = "100%";
+  stage.append(bar);
+  body.append(stage);
+}
+
+// --- asking ---------------------------------------------------------------
+
+function nextQuestion(d) {
+  const r = state.rules;
+  if (d.index >= d.rounds) {
+    d.phase = "done";
+    saveProgress(d.progress);
+    render();
+    return;
+  }
+  const available = d.kinds.filter((k) => {
+    if (k === "deviation") return d.devs && d.devs.length;
+    if (k === "bet") return state.bankroll > 0;
+    return true;
+  });
+  const kind = pickKind(available.length ? available : ["count"], d.progress);
+
+  if (kind === "count") {
+    d.question = countQuestion(r, d.cards);
+    d.phase = "flashing";
+    d.flashIndex = -1;
+    d.input = "";
+    render();
+    flashNext(d);
+    return;
+  }
+  if (kind === "truecount") d.question = trueCountQuestion(r);
+  else if (kind === "strategy") d.question = strategyQuestion(Object.keys(d.chart),
+    Object.fromEntries(Object.entries(d.chart).map(([k, v]) => [k, v.action])), d.progress);
+  else if (kind === "deviation") d.question = deviationQuestion(d.devs, d.progress);
+  else d.question = betQuestion(r, currentRampBets(), d.progress);
+
+  d.phase = "asking";
+  d.input = "";
+  d.askedAt = performance.now();
+  render();
+}
+
+function currentRampBets() {
+  const dist = ensureDist();
+  const ramp = kellyRamp(state.rules, dist, {
+    bankroll: state.bankroll, kellyFraction: state.kelly,
+    maxSpread: state.maxSpread, wongOutBelow: state.wong,
+  });
+  const out = {};
+  for (const tc of counts(dist)) {
+    if ((dist.probs[tc] || 0) >= 0.005) out[tc] = ramp.bet(tc);
+  }
+  return Object.keys(out).length ? out : { 0: state.rules.tableMin };
+}
+
+function flashNext(d) {
+  stopDrillTimers();
+  d.flashIndex += 1;
+  if (d.flashIndex >= d.question.cards.length) {
+    d.phase = "asking";
+    d.askedAt = performance.now();
+    render();
+    return;
+  }
+  render();
+  d.timer = setTimeout(() => flashNext(d), 1000 / d.speed);
+}
+
+function drawStage(body, d) {
+  const q = d.question;
+  const stage = el("div", "stage");
+
+  const meta = el("div", "meta");
+  meta.append(el("span", null, `${Math.min(d.index + 1, d.rounds)} / ${d.rounds}`));
+  meta.append(el("span", null, `${d.correct} right`));
+  meta.append(el("span", null, KIND_LABELS[q.kind]));
+  stage.append(meta);
+
+  if (d.phase === "flashing") {
+    const card = el("div", "flashcard");
+    card.textContent = q.faces[d.flashIndex] ?? "";
+    stage.append(card);
+    const dealt = el("div", "dealt");
+    for (let i = 0; i < d.flashIndex; i++) dealt.append(el("span", null, q.faces[i]));
+    stage.append(dealt);
+    const skip = el("button", "btn ghost", "Skip to the answer");
+    skip.type = "button";
+    skip.addEventListener("click", () => {
+      stopDrillTimers();
+      d.flashIndex = q.cards.length;
+      flashNext(d);
+    });
+    stage.append(skip);
+  } else if (d.phase === "asking") {
+    stage.append(questionPrompt(q));
+    if (q.kind === "strategy" || q.kind === "deviation") stage.append(actionPad(d));
+    else stage.append(entryDisplay(d), keypad(d));
+  } else if (d.phase === "feedback") {
+    stage.append(feedbackBlock(d));
+    const go = el("button", "btn", d.index >= d.rounds ? "See results" : "Next");
+    go.type = "button";
+    go.addEventListener("click", () => nextQuestion(d));
+    stage.append(go);
+  }
+
+  body.append(stage);
+  const track = el("div", "progress-track");
+  const fill = el("i");
+  fill.style.width = `${(d.index / d.rounds) * 100}%`;
+  track.append(fill);
+  body.append(track);
+
+  const row = el("div", "btn-row");
+  row.style.marginTop = "12px";
+  const stop = el("button", "btn ghost", "Stop");
+  stop.type = "button";
+  stop.addEventListener("click", () => {
+    stopDrillTimers();
+    saveProgress(d.progress);
+    d.phase = d.index > 0 ? "done" : "setup";
+    render();
+  });
+  row.append(stop);
+  body.append(row);
+}
+
+function questionPrompt(q) {
+  const wrap = el("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:6px;align-items:center";
+  if (q.kind === "count") {
+    wrap.append(el("div", "prompt", "Running count?"));
+  } else if (q.kind === "truecount") {
+    const p = el("div", "prompt");
+    p.innerHTML = `Running count <span class="up">${signed(q.runningCount)}</span>,
+      about ${q.decksRemaining} decks left`;
+    wrap.append(p, el("div", "sub-prompt", "True count?"));
+  } else if (q.kind === "bet") {
+    const p = el("div", "prompt");
+    p.innerHTML = `True count <span class="up">${signed(q.trueCount)}</span>`;
+    wrap.append(p, el("div", "sub-prompt", `What do you bet, in ${state.rules.currency}?`));
+  } else {
+    const p = el("div", "prompt");
+    p.innerHTML = `${q.hand} vs <span class="up">${q.upcard}</span>`;
+    wrap.append(p);
+    wrap.append(el("div", "sub-prompt",
+      q.kind === "deviation" ? `at true count ${signed(q.trueCount)}` : "what is the play?"));
+  }
+  return wrap;
+}
+
+function entryDisplay(d) {
+  const e = el("div", "entry" + (d.input ? "" : " empty"), d.input || "—");
+  e.id = "entry";
+  return e;
+}
+
+function keypad(d) {
+  const pad = el("div", "keypad");
+  const press = (ch) => {
+    if (ch === "back") d.input = d.input.slice(0, -1);
+    else if (ch === "sign") {
+      d.input = d.input.startsWith("-") ? d.input.slice(1) : "-" + d.input;
+    } else if (d.input.replace("-", "").length < 6) d.input += ch;
+    const e = document.getElementById("entry");
+    if (e) {
+      e.textContent = d.input || "—";
+      e.className = "entry" + (d.input ? "" : " empty");
+    }
+  };
+  for (const ch of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
+    const b = el("button", null, ch);
+    b.type = "button";
+    b.addEventListener("click", () => press(ch));
+    pad.append(b);
+  }
+  const neg = el("button", null, "±");
+  neg.type = "button";
+  neg.addEventListener("click", () => press("sign"));
+  const zero = el("button", null, "0");
+  zero.type = "button";
+  zero.addEventListener("click", () => press("0"));
+  const back = el("button", null, "⌫");
+  back.type = "button";
+  back.addEventListener("click", () => press("back"));
+  pad.append(neg, zero, back);
+  const go = el("button", "go wide", "Answer");
+  go.type = "button";
+  go.addEventListener("click", () => submit(d, d.input));
+  pad.append(go);
+  return pad;
+}
+
+function actionPad(d) {
+  const pad = el("div", "actions");
+  for (const [value, label, letter] of ACTION_KEYS) {
+    const b = el("button");
+    b.type = "button";
+    b.append(document.createTextNode(label));
+    b.append(el("small", null, letter));
+    b.addEventListener("click", () => submit(d, value));
+    pad.append(b);
+  }
+  return pad;
+}
+
+function submit(d, response) {
+  if (d.phase !== "asking") return;
+  const ms = performance.now() - d.askedAt;
+  const right = checkAnswer(d.question, response);
+  d.progress.record(d.question.itemKey, right, ms);
+  d.lastMs = ms;
+  d.wasRight = right;
+  d.given = response;
+  d.correct += right ? 1 : 0;
+  d.index += 1;
+  d.times.push(ms);
+  d.phase = "feedback";
+  saveProgress(d.progress);
+  render();
+}
+
+function feedbackBlock(d) {
+  const q = d.question;
+  const wrap = el("div", "feedback " + (d.wasRight ? "right" : "wrong"));
+  wrap.append(el("div", "verdict-word", d.wasRight ? "Correct" : "No"));
+  const truth = q.kind === "strategy" || q.kind === "deviation"
+    ? q.answer
+    : q.kind === "truecount" ? q.answer.toFixed(2)
+      : q.kind === "bet" ? money(q.answer, state.rules) : signed(q.answer);
+  wrap.append(el("div", "truth", truth));
+  if (!d.wasRight) wrap.append(el("div", "why", q.explain));
+  const clock = el("div", "clock", `${(d.lastMs / 1000).toFixed(1)}s`);
+  if (q.kind === "count") {
+    clock.textContent += ` · ${(q.cards.length / (d.lastMs / 1000 + q.cards.length / d.speed)).toFixed(1)} cards/sec including the deal`;
+  }
+  wrap.append(clock);
+  return wrap;
+}
+
+function drawDone(body, d) {
+  const stage = el("div", "stage");
+  const pctRight = d.index ? d.correct / d.index : 0;
+  stage.append(el("div", "prompt",
+    pctRight >= 0.9 ? "Sharp." : pctRight >= 0.7 ? "Getting there." : "Worth another round."));
+  const line = el("div", "scoreline");
+  const mean = d.times.length ? d.times.reduce((a, b) => a + b, 0) / d.times.length / 1000 : 0;
+  line.innerHTML = `<span><b>${d.correct}/${d.index}</b> correct</span>
+    <span><b>${Math.round(pctRight * 100)}%</b></span>
+    <span><b>${mean.toFixed(1)}s</b> average</span>`;
+  stage.append(line);
+  const row = el("div", "btn-row");
+  const again = el("button", "btn", "Go again");
+  again.type = "button";
+  again.addEventListener("click", () => startDrill(d));
+  const back = el("button", "btn ghost", "Change what you drill");
+  back.type = "button";
+  back.addEventListener("click", () => { d.phase = "setup"; render(); });
+  row.append(again, back);
+  stage.append(row);
+  body.append(stage);
+  body.append(progressBlock(d));
+}

@@ -7,7 +7,7 @@
   --ground:#f4f4f1; --surface:#ffffff; --surface-2:#ecece7;
   --ink:#171b18; --ink-dim:#5c6660; --ink-faint:#8b948e;
   --line:#dcdcd6; --line-strong:#c3c4bc;
-  --accent:#237a52; --accent-soft:#d8ece2;
+  --accent:#237a52; --accent-soft:#d8ece2; --on-accent:#ffffff;
   --good:#237a52; --warn:#9a6f18; --bad:#a83f2e;
   --act-hit:#e8e8e2; --act-hit-ink:#3a403c;
   --act-stand:#e6c374; --act-stand-ink:#4a3a08;
@@ -22,7 +22,7 @@
     --ground:#121613; --surface:#1a201c; --surface-2:#232a26;
     --ink:#e6eae7; --ink-dim:#98a49d; --ink-faint:#6d7a73;
     --line:#2b332e; --line-strong:#3c463f;
-    --accent:#3fae7a; --accent-soft:#1d3529;
+    --accent:#3fae7a; --accent-soft:#1d3529; --on-accent:#08130d;
     --good:#3fae7a; --warn:#d4a24c; --bad:#cc5540;
     --act-hit:#2b332e; --act-hit-ink:#cfd8d2;
     --act-stand:#8a6c22; --act-stand-ink:#f6e6c2;
@@ -36,7 +36,7 @@
   --ground:#121613; --surface:#1a201c; --surface-2:#232a26;
   --ink:#e6eae7; --ink-dim:#98a49d; --ink-faint:#6d7a73;
   --line:#2b332e; --line-strong:#3c463f;
-  --accent:#3fae7a; --accent-soft:#1d3529;
+  --accent:#3fae7a; --accent-soft:#1d3529; --on-accent:#08130d;
   --good:#3fae7a; --warn:#d4a24c; --bad:#cc5540;
   --act-hit:#2b332e; --act-hit-ink:#cfd8d2;
   --act-stand:#8a6c22; --act-stand-ink:#f6e6c2;
@@ -254,4 +254,103 @@ td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
   Card counting is legal; casinos are private property and may refuse service.
 </p>
 
+<style>
+/* ---- Drill ------------------------------------------------------------- */
+.drill-setup{display:flex; flex-direction:column; gap:16px}
+.chips{display:flex; gap:7px; flex-wrap:wrap}
+.chips button{
+  font:inherit; font-size:13px; font-weight:500; padding:7px 13px; border-radius:99px;
+  border:1px solid var(--line-strong); background:var(--ground); color:var(--ink-dim);
+  cursor:pointer;
+}
+.chips button[aria-pressed="true"]{
+  background:var(--accent-soft); border-color:var(--accent); color:var(--good); font-weight:600;
+}
+.chips button:disabled{opacity:.5; cursor:not-allowed}
+.btn{
+  font:inherit; font-weight:600; font-size:14px; padding:11px 20px; border-radius:9px;
+  border:1px solid transparent; background:var(--accent); color:var(--on-accent);
+  cursor:pointer;
+}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent; border-color:var(--line-strong); color:var(--ink-dim)}
+.btn.ghost:hover{color:var(--ink)}
+.btn-row{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
+
+.stage{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  padding:22px 14px 26px; min-height:330px; justify-content:center;
+}
+.stage .meta{
+  font-size:12px; color:var(--ink-faint); letter-spacing:.05em; text-transform:uppercase;
+  font-weight:600; display:flex; gap:14px; align-items:center;
+}
+.flashcard{
+  width:132px; height:184px; border-radius:14px; background:var(--surface);
+  border:1px solid var(--line-strong); box-shadow:var(--shadow);
+  display:flex; align-items:center; justify-content:center;
+  font-family:"IBM Plex Mono",monospace; font-size:64px; font-weight:600;
+  color:var(--ink); user-select:none;
+}
+.flashcard.blank{color:var(--ink-faint); font-size:22px; font-weight:500; letter-spacing:.06em}
+.dealt{display:flex; gap:4px; flex-wrap:wrap; justify-content:center; max-width:340px; min-height:22px}
+.dealt span{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-faint);
+  background:var(--surface-2); border-radius:4px; padding:1px 5px;
+}
+.prompt{
+  font-family:Archivo,sans-serif; font-size:21px; font-weight:600; text-align:center;
+  text-wrap:balance; max-width:24ch; line-height:1.25;
+}
+.prompt .up{color:var(--accent)}
+.sub-prompt{font-size:13px; color:var(--ink-dim); margin-top:-6px}
+
+.entry{
+  font-family:"IBM Plex Mono",monospace; font-size:34px; font-weight:600;
+  min-height:48px; min-width:132px; text-align:center; letter-spacing:.02em;
+  border-bottom:2px solid var(--line-strong); padding:2px 12px; color:var(--ink);
+}
+.entry.empty{color:var(--ink-faint)}
+
+.keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:7px; width:100%; max-width:250px}
+.keypad button{
+  font-family:"IBM Plex Mono",monospace; font-size:19px; font-weight:600;
+  padding:13px 0; border-radius:9px; border:1px solid var(--line-strong);
+  background:var(--surface); color:var(--ink); cursor:pointer;
+}
+.keypad button:active{background:var(--surface-2)}
+.keypad button.go{background:var(--accent); color:var(--on-accent); border-color:transparent}
+.keypad button.wide{grid-column:span 2}
+
+.actions{display:grid; grid-template-columns:repeat(3,1fr); gap:7px; width:100%; max-width:340px}
+.actions button{
+  font:inherit; font-weight:600; font-size:14px; padding:14px 6px; border-radius:9px;
+  border:1px solid var(--line-strong); background:var(--surface); color:var(--ink);
+  cursor:pointer; line-height:1.2;
+}
+.actions button small{display:block; font-size:10.5px; font-weight:500; color:var(--ink-faint); margin-top:2px}
+.actions button:active{background:var(--surface-2)}
+
+.feedback{text-align:center; display:flex; flex-direction:column; gap:5px; align-items:center}
+.feedback .verdict-word{font-family:Archivo,sans-serif; font-size:17px; font-weight:700; letter-spacing:.02em}
+.feedback.right .verdict-word{color:var(--good)}
+.feedback.wrong .verdict-word{color:var(--bad)}
+.feedback .truth{font-family:"IBM Plex Mono",monospace; font-size:26px; font-weight:600}
+.feedback .why{font-size:12.5px; color:var(--ink-dim); max-width:36ch; line-height:1.45}
+.feedback .clock{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-faint)}
+
+.scoreline{
+  display:flex; gap:16px; align-items:baseline; font-family:"IBM Plex Mono",monospace;
+  font-size:13px; color:var(--ink-dim);
+}
+.scoreline b{color:var(--ink); font-size:15px}
+.progress-track{height:3px; background:var(--surface-2); border-radius:99px; overflow:hidden}
+.progress-track i{display:block; height:100%; background:var(--accent); transition:width .2s}
+
+.kind-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr)); gap:8px}
+.kind-stat{background:var(--surface-2); border-radius:8px; padding:9px 11px}
+.kind-stat .k{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); font-weight:600}
+.kind-stat .v{font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; margin-top:3px}
+.kind-stat .n{font-size:11px; color:var(--ink-faint)}
+</style>
 <script type="module" src="./src/app.js"></script>

@@ -23,6 +23,21 @@ invitation to drift. Two things hold them together.
 
 If you change the Python engine and not the JavaScript, the test suite fails.
 
+## The drill
+
+The third tab is the trainer, ported from `src/bjtoolkit/trainer.py`. Five
+drills: card-flash running count (1 to 4 cards per second), true-count
+conversion, basic strategy, index plays, and bet sizing off your own ramp.
+
+Questions come from the chart computed for the rules currently set, so you
+practise the game you actually sit at. Index plays need a one-off scan of every
+cell — about half a minute — which is chunked so the progress bar paints, then
+cached in `localStorage` per rule set.
+
+Repetition is weighted toward misses first, then slow answers, bounded so
+nothing starves. History lives in `localStorage`: private to your browser, never
+sent anywhere, and it survives a republish.
+
 ## Layout
 
 ```

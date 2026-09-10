@@ -2500,5 +2500,243 @@
    "0.5": 0.01831563888873418,
    "1.0": 0.1353352832366127
   }
+ },
+ "trainer": {
+  "weights": {
+   "always-wrong-and-slow": {
+    "accuracy": 0.0,
+    "events": [
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ],
+     [
+      false,
+      60.0
+     ]
+    ],
+    "meanSeconds": 60.0,
+    "weight": 9.0
+   },
+   "five-right": {
+    "accuracy": 1.0,
+    "events": [
+     [
+      true,
+      1.0
+     ],
+     [
+      true,
+      1.0
+     ],
+     [
+      true,
+      1.0
+     ],
+     [
+      true,
+      1.0
+     ],
+     [
+      true,
+      1.0
+     ]
+    ],
+    "meanSeconds": 1.0,
+    "weight": 1.0
+   },
+   "five-wrong": {
+    "accuracy": 0.0,
+    "events": [
+     [
+      false,
+      1.0
+     ],
+     [
+      false,
+      1.0
+     ],
+     [
+      false,
+      1.0
+     ],
+     [
+      false,
+      1.0
+     ],
+     [
+      false,
+      1.0
+     ]
+    ],
+    "meanSeconds": 1.0,
+    "weight": 6.0
+   },
+   "half-and-half": {
+    "accuracy": 0.5,
+    "events": [
+     [
+      true,
+      2.0
+     ],
+     [
+      false,
+      2.0
+     ],
+     [
+      true,
+      2.0
+     ],
+     [
+      false,
+      2.0
+     ]
+    ],
+    "meanSeconds": 2.0,
+    "weight": 3.5
+   },
+   "one-right-fast": {
+    "accuracy": 1.0,
+    "events": [
+     [
+      true,
+      1.0
+     ]
+    ],
+    "meanSeconds": 1.0,
+    "weight": 1.0
+   },
+   "one-right-slow": {
+    "accuracy": 1.0,
+    "events": [
+     [
+      true,
+      12.0
+     ]
+    ],
+    "meanSeconds": 12.0,
+    "weight": 4.0
+   },
+   "one-wrong": {
+    "accuracy": 0.0,
+    "events": [
+     [
+      false,
+      1.0
+     ]
+    ],
+    "meanSeconds": 1.0,
+    "weight": 6.0
+   },
+   "right-but-laboured": {
+    "accuracy": 1.0,
+    "events": [
+     [
+      true,
+      9.0
+     ],
+     [
+      true,
+      9.0
+     ],
+     [
+      true,
+      9.0
+     ],
+     [
+      true,
+      9.0
+     ],
+     [
+      true,
+      9.0
+     ],
+     [
+      true,
+      9.0
+     ]
+    ],
+    "meanSeconds": 9.0,
+    "weight": 2.875
+   },
+   "unseen": {
+    "accuracy": 0.0,
+    "events": [],
+    "meanSeconds": 0.0,
+    "weight": 6.0
+   }
+  }
  }
 }

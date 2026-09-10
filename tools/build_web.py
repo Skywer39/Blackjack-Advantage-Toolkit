@@ -29,6 +29,7 @@ MODULES = [
     "src/engine/strategy.js",
     "src/engine/frequency.js",
     "src/engine/risk.js",
+    "src/engine/trainer.js",
     "src/app.js",
 ]
 

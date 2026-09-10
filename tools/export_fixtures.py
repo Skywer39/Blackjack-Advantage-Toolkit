@@ -131,6 +131,34 @@ def fixtures() -> dict:
                     ),
                 })
     out["risk"]["cases"] = rows
+    # Trainer weighting is a pure function of an item's history, and the drill
+    # is only better than a flashcard loop because of it -- so it is pinned.
+    from bjtoolkit.trainer import Progress
+
+    histories = {
+        "unseen": [],
+        "one-right-fast": [(True, 1.0)],
+        "one-wrong": [(False, 1.0)],
+        "one-right-slow": [(True, 12.0)],
+        "five-right": [(True, 1.0)] * 5,
+        "five-wrong": [(False, 1.0)] * 5,
+        "half-and-half": [(True, 2.0), (False, 2.0), (True, 2.0), (False, 2.0)],
+        "always-wrong-and-slow": [(False, 60.0)] * 20,
+        "right-but-laboured": [(True, 9.0)] * 6,
+    }
+    weights = {}
+    for name, events in histories.items():
+        prog = Progress()
+        for correct, seconds in events:
+            prog.record(name, correct, seconds)
+        weights[name] = {
+            "events": [[c, s] for c, s in events],
+            "weight": prog.weight(name),
+            "accuracy": prog.stat(name).accuracy,
+            "meanSeconds": prog.stat(name).mean_seconds,
+        }
+    out["trainer"] = {"weights": weights}
+
     out["risk"]["kellyForRor"] = {str(t): kelly_for_ror(t)
                                   for t in (0.01, 0.05, 0.1, 0.25)}
     out["risk"]["rorForKelly"] = {str(f): ror_for_kelly(f)

@@ -20,6 +20,11 @@ that computes everything in the browser. No server, no account, works offline
 once loaded, installs to an iPhone home screen from Safari's Share → Add to Home
 Screen.
 
+Three tabs: the bankroll and ramp calculator, the strategy chart, and a **drill**
+— card-flash counting at a speed you choose, true-count conversion, basic
+strategy, index plays and bet sizing, with repetition weighted toward what you
+get wrong and your history kept between sessions.
+
 It is not a precomputed bundle. The engine is ported to JavaScript, so it prices
 **any** rule set you type in — change the hole-card rule and the whole chart
 recomputes. Two implementations of one model would normally drift; here the

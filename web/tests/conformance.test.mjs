@@ -16,6 +16,7 @@ import { basicStrategy, chartLookup, insuranceIndex } from "../src/engine/strate
 import {
   bankrollForRor, evaluate, kellyForRor, rorForKelly, spreadRamp,
 } from "../src/engine/risk.js";
+import { Progress } from "../src/engine/trainer.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = JSON.parse(
@@ -118,6 +119,17 @@ for (const [t, want] of Object.entries(fx.risk.kellyForRor)) {
 }
 for (const [f, want] of Object.entries(fx.risk.rorForKelly)) {
   close(rorForKelly(Number(f)), want, `rorForKelly/${f}`);
+}
+
+// --- trainer weighting ----------------------------------------------------
+for (const [name, want] of Object.entries(fx.trainer.weights)) {
+  const p = new Progress();
+  for (const [correct, seconds] of want.events) p.record(name, correct, seconds * 1000);
+  close(p.weight(name), want.weight, `trainerWeight/${name}`);
+  if (want.events.length) {
+    close(p.accuracy(name), want.accuracy, `trainerAccuracy/${name}`);
+    close(p.meanSeconds(name), want.meanSeconds, `trainerMeanSeconds/${name}`);
+  }
 }
 
 // --- report ---------------------------------------------------------------
