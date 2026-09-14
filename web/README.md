@@ -38,6 +38,23 @@ Repetition is weighted toward misses first, then slow answers, bounded so
 nothing starves. History lives in `localStorage`: private to your browser, never
 sent anywhere, and it survives a republish.
 
+## Offline
+
+A service worker precaches the page, the manifest and the icons, and
+cache-firsts the Google Fonts so the typefaces survive too; every `font-family`
+declares a real fallback stack, so even an uncached font degrades rather than
+breaks. `tests/test_web_build.py` checks the plumbing, and the offline path was
+verified by cutting the network and reloading — the app returns and recomputes
+the full chart.
+
+The cache name is stamped with a hash of the built page, so a redeploy
+invalidates the old one. That matters more here than on most sites: a stale bet
+ramp is worse than none, because it still looks current.
+
+Service workers need a real origin, so this applies to the Pages build. The
+artifact is served as a lone file with no sibling `sw.js`; registration fails
+there and the app carries on, since everything it needs is already inline.
+
 ## Layout
 
 ```
@@ -46,7 +63,8 @@ web/
   src/engine/*.js     the port: cards, rules, analyzer, strategy, frequency, risk
   src/app.js          the UI
   tests/              the conformance harness
-  dist/index.html     the built single file (committed, checked for staleness)
+  manifest.webmanifest, sw.js, icons/   the offline shell
+  dist/               the built site: page, service worker, manifest, icons
 ```
 
 ## Working on it

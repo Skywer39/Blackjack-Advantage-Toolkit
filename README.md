@@ -15,10 +15,11 @@ pip install -e .
 
 ## On your phone
 
-There is a web app: **[Ramp & Ruin](web/)** — a single self-contained HTML file
-that computes everything in the browser. No server, no account, works offline
-once loaded, installs to an iPhone home screen from Safari's Share → Add to Home
-Screen.
+There is a web app: **[Ramp & Ruin](web/)** — everything computed on the device,
+no server and no account. Served from GitHub Pages it is an installable offline
+app: Safari → Share → **Add to Home Screen**, and it opens in airplane mode with
+its own icon and no browser chrome. Verified by cutting the network and
+reloading: the page comes back and recomputes all 340 chart cells.
 
 Three tabs: the bankroll and ramp calculator, the strategy chart, and a **drill**
 — card-flash counting at a speed you choose, true-count conversion, basic

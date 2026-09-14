@@ -1,0 +1,17 @@
+{
+  "name": "Ramp & Ruin",
+  "short_name": "Ramp & Ruin",
+  "description": "Bankroll, bet-spread and risk-of-ruin analysis for card counting, with a drill trainer. Everything computed on the device.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121613",
+  "theme_color": "#121613",
+  "categories": ["utilities", "education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

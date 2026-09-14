@@ -13,7 +13,9 @@ producing a silently broken page.
 
 from __future__ import annotations
 
+import hashlib
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -80,12 +82,32 @@ def build() -> str:
     return html.replace(marker, f'<script type="module">\n{js}\n</script>')
 
 
+def build_sw(html: str) -> str:
+    """The service worker, stamped with a hash of the page it caches.
+
+    Without this a redeploy would keep serving the previous build from cache,
+    and a stale bet ramp is worse than none because it still looks current.
+    """
+    digest = hashlib.sha256(html.encode()).hexdigest()[:12]
+    sw = (WEB / "sw.js").read_text()
+    if "__BUILD__" not in sw:
+        raise SystemExit("sw.js has no __BUILD__ placeholder to stamp")
+    return sw.replace("__BUILD__", digest)
+
+
 def main() -> int:
-    out = WEB / "dist" / "index.html"
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out = WEB / "dist"
+    out.mkdir(parents=True, exist_ok=True)
     html = build()
-    out.write_text(html)
-    print(f"wrote {out} ({len(html) / 1024:.0f} KB)")
+    (out / "index.html").write_text(html)
+    (out / "sw.js").write_text(build_sw(html))
+    shutil.copy2(WEB / "manifest.webmanifest", out / "manifest.webmanifest")
+    icons = out / "icons"
+    icons.mkdir(exist_ok=True)
+    for src in sorted((WEB / "icons").glob("*.png")):
+        shutil.copy2(src, icons / src.name)
+    n = len(list(icons.glob("*.png")))
+    print(f"wrote {out}/ ({len(html) / 1024:.0f} KB page, {n} icons)")
     return 0
 
 

@@ -186,3 +186,85 @@ def test_every_token_used_is_defined(bundle):
     used = set(_re.findall(r"var\((--[\w-]+)", bundle))
     missing = sorted(used - defined)
     assert not missing, f"tokens used but never defined in the bare :root: {missing}"
+
+
+# --- offline app ----------------------------------------------------------
+
+def test_manifest_is_valid_and_complete():
+    import json as _json
+
+    m = _json.loads((ROOT / "web" / "manifest.webmanifest").read_text())
+    for key in ("name", "short_name", "start_url", "scope", "display",
+                "background_color", "theme_color", "icons"):
+        assert key in m, key
+    assert m["display"] == "standalone"
+    sizes = {i["sizes"] for i in m["icons"]}
+    assert {"192x192", "512x512"} <= sizes
+    assert any(i.get("purpose") == "maskable" for i in m["icons"])
+
+
+def test_manifest_icons_exist_and_are_pngs():
+    import json as _json
+
+    m = _json.loads((ROOT / "web" / "manifest.webmanifest").read_text())
+    for icon in m["icons"]:
+        path = ROOT / "web" / icon["src"]
+        assert path.exists(), icon["src"]
+        assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", icon["src"]
+
+
+def test_apple_touch_icon_exists():
+    """iOS ignores the manifest's icons for Add to Home Screen."""
+    path = ROOT / "web" / "icons" / "apple-touch-icon.png"
+    assert path.exists()
+    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_page_declares_the_offline_plumbing(bundle):
+    for marker in ('rel="manifest"', 'rel="apple-touch-icon"',
+                   "apple-mobile-web-app-capable", 'name="theme-color"',
+                   "serviceWorker"):
+        assert marker in bundle, marker
+
+
+def test_theme_colour_is_declared_for_both_schemes(bundle):
+    assert 'media="(prefers-color-scheme: light)"' in bundle
+    assert 'media="(prefers-color-scheme: dark)"' in bundle
+
+
+def test_service_worker_cache_is_stamped_with_the_build():
+    """An unstamped cache name would keep serving the previous build forever,
+    and a stale bet ramp is worse than none because it still looks current."""
+    from tools.build_web import build, build_sw
+
+    html = build()
+    sw = build_sw(html)
+    assert "__BUILD__" not in sw
+    import re as _re
+    name = _re.search(r'CACHE = "(ramp-ruin-[0-9a-f]{12})"', sw)
+    assert name, "service worker cache name is not stamped"
+    # A different page must produce a different cache.
+    other = build_sw(html + "<!-- changed -->")
+    assert name.group(1) not in other
+
+
+def test_service_worker_precaches_the_page_and_icons():
+    sw = (ROOT / "web" / "sw.js").read_text()
+    for entry in ("./index.html", "./manifest.webmanifest",
+                  "./icons/icon-192.png", "./icons/apple-touch-icon.png"):
+        assert entry in sw, entry
+
+
+@needs_node
+def test_service_worker_is_valid_javascript():
+    result = subprocess.run([node, "--check", str(ROOT / "web" / "sw.js")],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_built_site_has_everything_it_needs_to_serve():
+    dist = ROOT / "web" / "dist"
+    expected = {"index.html", "sw.js", "manifest.webmanifest"}
+    assert expected <= {p.name for p in dist.iterdir()}
+    icons = {p.name for p in (dist / "icons").glob("*.png")}
+    assert {"icon-192.png", "icon-512.png", "apple-touch-icon.png"} <= icons

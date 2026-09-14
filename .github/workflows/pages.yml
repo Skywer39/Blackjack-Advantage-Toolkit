@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: "20"
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" Pillow
       - name: Regenerate the browser engine's constants
         run: python -m tools.export_constants
       - name: Check the browser engine against the Python engine
@@ -41,12 +41,12 @@ jobs:
         run: pytest -q
       - name: Lint
         run: ruff check src tests tools
-      - name: Build the single-file app
-        run: python -m tools.build_web
-      - name: Stage the site
+      - name: Build the app and its offline shell
         run: |
-          mkdir -p _site
-          cp web/dist/index.html _site/index.html
+          python -m tools.make_icons
+          python -m tools.build_web
+      - name: Stage the site
+        run: cp -r web/dist _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

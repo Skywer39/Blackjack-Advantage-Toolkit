@@ -728,7 +728,20 @@ function initRail() {
   wide.addEventListener("change", sync);
 }
 
+// Offline support, where the host provides it. The artifact build is served as
+// a lone file with no sibling sw.js, so registration simply fails there and the
+// app carries on -- everything it needs is already inline.
+function initOffline() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {
+      /* no service worker here; the page works regardless */
+    });
+  });
+}
+
 initTheme();
+initOffline();
 initRail();
 buildRail();
 render();
